@@ -148,6 +148,7 @@ class InterviewApp {
       if (this.isFollowUp) {
         if (this.currentFollowUpAudioFile) {
           this.setInputAcceptance(false);
+          this.updateActionButton("speaking");
           this.interviewerStatus.innerHTML = `
             <span class="w-2 h-2 rounded-full bg-tertiary"></span>
             <span>追加質問を読み上げています…</span>
@@ -164,6 +165,7 @@ class InterviewApp {
         }
       } else if (this.currentQuestion) {
         this.setInputAcceptance(false);
+        this.updateActionButton("speaking");
         this.interviewerStatus.innerHTML = `
           <span class="w-2 h-2 rounded-full bg-secondary"></span>
           <span>質問を読み上げ中…</span>
@@ -184,15 +186,17 @@ class InterviewApp {
 
       if (this.isAcceptingInput) {
         this.setInputAcceptance(false);
+        this.updateActionButton("ready");
       } else {
         this.isManuallyEdited = false;
         if (this.editBadge) this.editBadge.classList.add("hidden");
         this.setInputAcceptance(true);
+        this.updateActionButton("recording");
       }
     });
 
-    // 回答完了ボタン
-    this.btnSubmit.addEventListener("click", () => this.handleSubmitAnswer());
+    // 回答アクションボタン（1回目: タップして話す / 2回目: 送信）
+    this.btnSubmit.addEventListener("click", () => this.handleActionClick());
 
     // テキストエリア直接入力イベント（手動編集の検知）
     this.speechTranscript.addEventListener("input", () => {
@@ -437,6 +441,7 @@ class InterviewApp {
 
     // タイマーリセット
     this.startTimer();
+    this.updateActionButton("speaking");
 
     // 録音音声の読み上げ
     this.playQuestionAudio(this.currentQuestion.id, () => {
@@ -457,13 +462,10 @@ class InterviewApp {
 
   startAnsweringTurn() {
     this.resetInputArea();
-    // 先生の発話余韻やスピーカー残響が完全に消えるまで600ms待機してからマイク受付を開始
-    setTimeout(() => {
-      if (!this.isSpeaking) {
-        this.resetInputArea();
-        this.setInputAcceptance(true);
-      }
-    }, 600);
+    this.isSpeaking = false;
+    this.setInputAcceptance(false); // 自動起動はせずユーザーのタップ待ちにする
+    this.candidateStatus.innerText = "「タップして話す」を押して回答を始めてください";
+    this.updateActionButton("ready");
   }
 
   renderChecklist(structureStr) {
@@ -474,6 +476,50 @@ class InterviewApp {
         <span>${part.trim()}</span>
       </li>
     `).join("");
+  }
+
+  // --- アクションボタン（タップして話す / 送信）の表示制御 ---
+  updateActionButton(state) {
+    if (!this.btnSubmit) return;
+
+    if (state === "speaking") {
+      this.btnSubmit.disabled = true;
+      this.btnSubmit.className = "flex-1 py-3 px-4 rounded-xl bg-surface-container-high text-on-surface-variant font-bold opacity-60 cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base transition-all";
+      this.btnSubmit.innerHTML = `
+        <span class="material-symbols-outlined text-[18px] animate-spin">hourglass_empty</span>
+        <span>質問を読み上げ中…</span>
+      `;
+    } else if (state === "ready") {
+      this.btnSubmit.disabled = false;
+      this.btnSubmit.className = "flex-1 py-3 px-4 rounded-xl bg-secondary text-on-secondary font-bold hover:bg-opacity-95 shadow-lg animate-pulse active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base transition-all cursor-pointer";
+      this.btnSubmit.innerHTML = `
+        <span class="material-symbols-outlined text-[20px]">mic</span>
+        <span>タップして話す（回答開始）</span>
+      `;
+    } else if (state === "recording") {
+      this.btnSubmit.disabled = false;
+      this.btnSubmit.className = "flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-primary-container to-secondary text-on-primary font-bold hover:opacity-95 shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base transition-all cursor-pointer";
+      this.btnSubmit.innerHTML = `
+        <span>この内容で回答を送信する</span>
+        <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+      `;
+    }
+  }
+
+  // --- アクションボタンクリック処理（タップして話す / 送信の分岐） ---
+  handleActionClick() {
+    if (this.isSpeaking) return;
+
+    if (!this.isAcceptingInput) {
+      // 1回目のタップ：マイクを起動して回答開始（※iOSのUser Gestureを満たす）
+      this.isManuallyEdited = false;
+      if (this.editBadge) this.editBadge.classList.add("hidden");
+      this.setInputAcceptance(true);
+      this.updateActionButton("recording");
+    } else {
+      // 2回目のタップ：回答完了・送信
+      this.handleSubmitAnswer();
+    }
   }
 
   // --- 回答完了処理 ---
@@ -524,6 +570,7 @@ class InterviewApp {
 
     this.resetInputArea();
     this.setInputAcceptance(false);
+    this.updateActionButton("speaking");
     this.interviewerStatus.innerHTML = `
       <span class="w-2 h-2 rounded-full bg-tertiary"></span>
       <span>追加質問を読み上げています…</span>

@@ -97,8 +97,15 @@ class InterviewApp {
       };
 
       this.recognition.onresult = (event) => {
-        // 先生が話している間、または入力受付前は絶対に音声を拾わない
+        // 全体の累積発話テキストを抽出
+        let full = "";
+        for (let i = 0; i < event.results.length; ++i) {
+          full += event.results[i][0].transcript;
+        }
+
+        // 先生が話している間、または入力受付前は、その時点までの文字数を記録して完全に破棄
         if (!this.isAcceptingInput || this.isSpeaking) {
+          this.ignoredPrefixLength = full.length;
           return;
         }
 
@@ -107,12 +114,7 @@ class InterviewApp {
           return;
         }
 
-        // 入力受付開始以降の発話テキストを抽出
-        let full = "";
-        for (let i = 0; i < event.results.length; ++i) {
-          full += event.results[i][0].transcript;
-        }
-
+        // 入力受付開始以降の発話テキストのみを切り出して表示
         const candidateText = full.slice(this.ignoredPrefixLength || 0);
         this.speechTranscript.value = candidateText;
         this.charCount.innerText = `${candidateText.length} 文字`;
@@ -127,8 +129,8 @@ class InterviewApp {
 
       this.recognition.onend = () => {
         this.isRecognitionActive = false;
-        // 入力受付中かつコンピュータ発話中でない場合のみ再接続
-        if (this.isAcceptingInput && !this.isSpeaking && this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
+        // 面接セッション中なら自動で接続を維持（許可ダイアログの再発を防止）
+        if (this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
           try {
             this.recognition.start();
           } catch(e) {}
@@ -244,7 +246,7 @@ class InterviewApp {
   }
 
   ensureRecognitionActive() {
-    if (!this.recognition || this.isSpeaking) return;
+    if (!this.recognition) return;
     if (!this.isRecognitionActive) {
       try {
         this.recognition.start();
@@ -266,13 +268,6 @@ class InterviewApp {
   setInputAcceptance(accepting) {
     this.isAcceptingInput = accepting;
     this.updateMicUI(accepting);
-    if (accepting) {
-      if (!this.isSpeaking) {
-        this.ensureRecognitionActive();
-      }
-    } else {
-      this.stopRecognitionCompletely();
-    }
   }
 
   // --- チャットタイムライン操作 ---
@@ -357,6 +352,7 @@ class InterviewApp {
     if (this.chatTimeline) this.chatTimeline.innerHTML = "";
     this.addSystemDivider("練習モードを開始しました（全3問）");
     this.setupInterviewScreen();
+    this.ensureRecognitionActive(); // 面接開始時に1回だけマイクを接続維持
     await this.getVoicesAsync();
     this.loadQuestion();
   }
@@ -374,6 +370,7 @@ class InterviewApp {
     if (this.chatTimeline) this.chatTimeline.innerHTML = "";
     this.addSystemDivider(`本番モードを開始しました（全${this.questionList.length}問）`);
     this.setupInterviewScreen();
+    this.ensureRecognitionActive(); // 面接開始時に1回だけマイクを接続維持
     await this.getVoicesAsync();
     this.loadQuestion();
   }
@@ -831,8 +828,8 @@ class InterviewApp {
   // --- 汎用音声ファイルの再生制御 ---
   playAudioFile(audioPath, onEndCallback = null) {
     this.stopAllAudio();
-    this.stopRecognitionCompletely(); // 質問・追加質問読み上げ中はマイクを完全に遮断
     this.isSpeaking = true;
+    this.setInputAcceptance(false);
 
     if (!audioPath) {
       this.isSpeaking = false;

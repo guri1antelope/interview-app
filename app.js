@@ -18,6 +18,7 @@ class InterviewApp {
     this.ignoredPrefixLength = 0;     // 先生の発話中に拾った文字数（除外用）
     this.isManuallyEdited = false;    // 手動編集中フラグ
     this.currentAudio = null;         // 録音音声再生用インスタンス
+    this.currentFollowUpAudioFile = null; // 現在の追加質問音声ファイルパス
 
     // タイマー関連
     this.timerInterval = null;
@@ -146,12 +147,22 @@ class InterviewApp {
     // 再生ボタン
     this.btnReplay.addEventListener("click", () => {
       if (this.isFollowUp) {
-        // 追加質問は声なしのためステータスを案内してそのまま回答へ
-        this.interviewerStatus.innerHTML = `
-          <span class="w-2 h-2 rounded-full bg-secondary"></span>
-          <span>追加質問に答えてみましょう。</span>
-        `;
-        this.startAnsweringTurn();
+        if (this.currentFollowUpAudioFile) {
+          this.setInputAcceptance(false);
+          this.interviewerStatus.innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+            <span>追加質問を読み上げています…</span>
+          `;
+          this.playAudioFile(this.currentFollowUpAudioFile, () => {
+            this.interviewerStatus.innerHTML = `
+              <span class="w-2 h-2 rounded-full bg-secondary"></span>
+              <span>追加質問に答えてみましょう。</span>
+            `;
+            this.startAnsweringTurn();
+          });
+        } else {
+          this.startAnsweringTurn();
+        }
       } else if (this.currentQuestion) {
         this.setInputAcceptance(false);
         this.interviewerStatus.innerHTML = `
@@ -496,39 +507,36 @@ class InterviewApp {
     this.finishCurrentQuestion(answerText);
   }
 
-  // --- 追加質問の発動（※音声は声なし・テキストのみで即座に回答受付） ---
+  // --- 追加質問の発動（※録音音声の再生） ---
   triggerFollowUp(initialAnswer) {
     this.isFollowUp = true;
     this.initialAnswer = initialAnswer;
     
     const followUps = this.currentQuestion.followUpQuestions;
-    this.currentFollowUpQuestion = followUps[Math.floor(Math.random() * followUps.length)];
-    const followUpIntros = [
-      "お話ししてくれてありがとうございます。もう少し詳しく聞かせてください。",
-      "なるほど、しっかり自分の考えを持って答えてくれましたね。では、こういった点についてはどうでしょう？",
-      "ありがとうございます。今の答えを聞いてさらに興味が湧きました。もう一つ質問させてください。",
-      "よく伝わってきましたよ。では関連して、もう一つ教えてください。",
-      "なるほど、そういう工夫や経験があるのですね。では次の質問です。",
-      "率直に答えてくれて嬉しいです。では、もう一歩踏み込んで伺いますね。",
-      "具体的なエピソードをありがとう。では、その時についてもう少し教えてください。",
-      "大切な視点ですね。では、もし別の状況だったらどう行動しましたか？"
-    ];
-    const intro = followUpIntros[Math.floor(Math.random() * followUpIntros.length)];
-    const followUpSpeechText = `${intro} ${this.currentFollowUpQuestion}`;
+    const randomIndex = Math.floor(Math.random() * followUps.length);
+    this.currentFollowUpQuestion = followUps[randomIndex];
+
+    const addNumStr = String(randomIndex + 1).padStart(2, "0");
+    this.currentFollowUpAudioFile = `VOICE/${this.currentQuestion.id}_add${addNumStr}.wav`;
     
     // タイムラインに追加質問をメッセージとして追加
-    this.addChatMessage("interviewer", followUpSpeechText, { isFollowUp: true });
+    this.addChatMessage("interviewer", this.currentFollowUpQuestion, { isFollowUp: true });
 
     this.resetInputArea();
+    this.setInputAcceptance(false);
     this.interviewerStatus.innerHTML = `
-      <span class="w-2 h-2 rounded-full bg-secondary"></span>
-      <span>追加質問に答えてみましょう。</span>
+      <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+      <span>追加質問を読み上げています…</span>
     `;
 
-    // 追加質問は声なしのため、短い余白を挟んですぐに回答受付開始
-    setTimeout(() => {
+    // 音声ファイルを再生
+    this.playAudioFile(this.currentFollowUpAudioFile, () => {
+      this.interviewerStatus.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-secondary"></span>
+        <span>追加質問に答えてみましょう。</span>
+      `;
       this.startAnsweringTurn();
-    }, 300);
+    });
   }
 
   finishCurrentQuestion(finalAnswer) {
@@ -764,12 +772,18 @@ class InterviewApp {
     this.addChatMessage("interviewer", text, { isFollowUp: true });
 
     if (type === "repeat") {
-      if (this.isFollowUp) {
+      if (this.isFollowUp && this.currentFollowUpAudioFile) {
         this.interviewerStatus.innerHTML = `
-          <span class="w-2 h-2 rounded-full bg-secondary"></span>
-          <span>追加質問に答えてみましょう。</span>
+          <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+          <span>追加質問を読み上げています…</span>
         `;
-        setTimeout(() => this.startAnsweringTurn(), 300);
+        this.playAudioFile(this.currentFollowUpAudioFile, () => {
+          this.interviewerStatus.innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-secondary"></span>
+            <span>追加質問に答えてみましょう。</span>
+          `;
+          this.startAnsweringTurn();
+        });
       } else if (this.currentQuestion) {
         this.interviewerStatus.innerHTML = `
           <span class="w-2 h-2 rounded-full bg-secondary"></span>
@@ -808,13 +822,18 @@ class InterviewApp {
     return `VOICE/${pad}_question(Coral Reef Guide 1).wav`;
   }
 
-  // --- 録音音声の再生制御 ---
+  // --- 録音音声（本質問）の再生制御 ---
   playQuestionAudio(questionId, onEndCallback = null) {
+    const audioPath = this.getVoiceFilePath(questionId);
+    this.playAudioFile(audioPath, onEndCallback);
+  }
+
+  // --- 汎用音声ファイルの再生制御 ---
+  playAudioFile(audioPath, onEndCallback = null) {
     this.stopAllAudio();
-    this.stopRecognitionCompletely(); // 質問読み上げ中はマイクを完全に遮断
+    this.stopRecognitionCompletely(); // 質問・追加質問読み上げ中はマイクを完全に遮断
     this.isSpeaking = true;
 
-    const audioPath = this.getVoiceFilePath(questionId);
     if (!audioPath) {
       this.isSpeaking = false;
       if (onEndCallback) onEndCallback();
@@ -835,8 +854,7 @@ class InterviewApp {
 
     audio.onended = finish;
     audio.onerror = (e) => {
-      console.warn("録音音声ファイルの読み込み/再生エラー:", audioPath, e);
-      // 録音ファイルが読み込めない場合は安全に完了コールバックへ抜ける
+      console.warn("音声ファイルの読み込み/再生エラー:", audioPath, e);
       finish();
     };
 

@@ -96,15 +96,8 @@ class InterviewApp {
       };
 
       this.recognition.onresult = (event) => {
-        // 全体の発話テキストを抽出
-        let full = "";
-        for (let i = 0; i < event.results.length; ++i) {
-          full += event.results[i][0].transcript;
-        }
-
-        // 先生が話している間、または入力受付前は、その時点までの文字数を記録して除外
+        // 先生が話している間、または入力受付前は絶対に音声を拾わない
         if (!this.isAcceptingInput || this.isSpeaking) {
-          this.ignoredPrefixLength = full.length;
           return;
         }
 
@@ -113,7 +106,12 @@ class InterviewApp {
           return;
         }
 
-        // Aさんが話した分のみを切り出して表示
+        // 入力受付開始以降の発話テキストを抽出
+        let full = "";
+        for (let i = 0; i < event.results.length; ++i) {
+          full += event.results[i][0].transcript;
+        }
+
         const candidateText = full.slice(this.ignoredPrefixLength || 0);
         this.speechTranscript.value = candidateText;
         this.charCount.innerText = `${candidateText.length} 文字`;
@@ -128,8 +126,8 @@ class InterviewApp {
 
       this.recognition.onend = () => {
         this.isRecognitionActive = false;
-        // 面接セッション中なら自動で再接続
-        if (this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
+        // 入力受付中かつコンピュータ発話中でない場合のみ再接続
+        if (this.isAcceptingInput && !this.isSpeaking && this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
           try {
             this.recognition.start();
           } catch(e) {}
@@ -172,6 +170,8 @@ class InterviewApp {
 
     // マイクON/OFF（手動切替）
     this.btnMic.addEventListener("click", () => {
+      if (this.isSpeaking) return; // 先生の発話中はマイク操作不可
+
       if (this.isAcceptingInput) {
         this.setInputAcceptance(false);
       } else {
@@ -233,7 +233,7 @@ class InterviewApp {
   }
 
   ensureRecognitionActive() {
-    if (!this.recognition) return;
+    if (!this.recognition || this.isSpeaking) return;
     if (!this.isRecognitionActive) {
       try {
         this.recognition.start();
@@ -247,6 +247,7 @@ class InterviewApp {
     if (this.recognition) {
       try {
         this.recognition.stop();
+        this.recognition.abort();
       } catch(e) {}
     }
   }
@@ -254,6 +255,13 @@ class InterviewApp {
   setInputAcceptance(accepting) {
     this.isAcceptingInput = accepting;
     this.updateMicUI(accepting);
+    if (accepting) {
+      if (!this.isSpeaking) {
+        this.ensureRecognitionActive();
+      }
+    } else {
+      this.stopRecognitionCompletely();
+    }
   }
 
   // --- チャットタイムライン操作 ---
@@ -338,7 +346,6 @@ class InterviewApp {
     if (this.chatTimeline) this.chatTimeline.innerHTML = "";
     this.addSystemDivider("練習モードを開始しました（全3問）");
     this.setupInterviewScreen();
-    this.ensureRecognitionActive();
     await this.getVoicesAsync();
     this.loadQuestion();
   }
@@ -356,7 +363,6 @@ class InterviewApp {
     if (this.chatTimeline) this.chatTimeline.innerHTML = "";
     this.addSystemDivider(`本番モードを開始しました（全${this.questionList.length}問）`);
     this.setupInterviewScreen();
-    this.ensureRecognitionActive();
     await this.getVoicesAsync();
     this.loadQuestion();
   }
@@ -441,10 +447,12 @@ class InterviewApp {
 
   startAnsweringTurn() {
     this.resetInputArea();
-    // 先生の声の余韻が収まるまで少し待ってから受付開始
+    // 先生の発話余韻やスピーカー残響が完全に消えるまで400ms待機してからマイク受付を開始
     setTimeout(() => {
-      this.setInputAcceptance(true);
-    }, 200);
+      if (!this.isSpeaking) {
+        this.setInputAcceptance(true);
+      }
+    }, 400);
   }
 
   renderChecklist(structureStr) {
@@ -803,6 +811,7 @@ class InterviewApp {
   // --- 録音音声の再生制御 ---
   playQuestionAudio(questionId, onEndCallback = null) {
     this.stopAllAudio();
+    this.stopRecognitionCompletely(); // 質問読み上げ中はマイクを完全に遮断
     this.isSpeaking = true;
 
     const audioPath = this.getVoiceFilePath(questionId);

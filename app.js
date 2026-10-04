@@ -17,6 +17,7 @@ class InterviewApp {
     this.isSpeaking = false;          // 先生の発話中フラグ
     this.ignoredPrefixLength = 0;     // 先生の発話中に拾った文字数（除外用）
     this.isManuallyEdited = false;    // 手動編集中フラグ
+    this.currentAudio = null;         // 録音音声再生用インスタンス
 
     // タイマー関連
     this.timerInterval = null;
@@ -146,8 +147,27 @@ class InterviewApp {
     
     // 再生ボタン
     this.btnReplay.addEventListener("click", () => {
-      const textToSpeak = this.isFollowUp ? this.currentFollowUpQuestion : this.currentQuestion.question;
-      this.pauseInputAndSpeak(textToSpeak);
+      if (this.isFollowUp) {
+        // 追加質問は声なしのためステータスを案内してそのまま回答へ
+        this.interviewerStatus.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-secondary"></span>
+          <span>追加質問に答えてみましょう。</span>
+        `;
+        this.startAnsweringTurn();
+      } else if (this.currentQuestion) {
+        this.setInputAcceptance(false);
+        this.interviewerStatus.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-secondary"></span>
+          <span>質問を読み上げ中…</span>
+        `;
+        this.playQuestionAudio(this.currentQuestion.id, () => {
+          this.interviewerStatus.innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-secondary"></span>
+            <span>あなたの番です。落ち着いて話してください。</span>
+          `;
+          this.startAnsweringTurn();
+        });
+      }
     });
 
     // マイクON/OFF（手動切替）
@@ -181,8 +201,7 @@ class InterviewApp {
       if (confirm("面接練習を終了してホームに戻りますか？")) {
         this.setInputAcceptance(false);
         this.stopRecognitionCompletely();
-        if (this.currentAudio) { this.currentAudio.pause(); this.currentAudio = null; }
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        this.stopAllAudio();
         this.stopTimer();
         this.showView("home");
       }
@@ -403,8 +422,8 @@ class InterviewApp {
     // タイマーリセット
     this.startTimer();
 
-    // 先生による音声読み上げ
-    this.speakText(this.currentQuestion.question, () => {
+    // 録音音声の読み上げ
+    this.playQuestionAudio(this.currentQuestion.id, () => {
       this.interviewerStatus.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-secondary"></span>
         <span>あなたの番です。落ち着いて話してください。</span>
@@ -469,7 +488,7 @@ class InterviewApp {
     this.finishCurrentQuestion(answerText);
   }
 
-  // --- 追加質問の発動 ---
+  // --- 追加質問の発動（※音声は声なし・テキストのみで即座に回答受付） ---
   triggerFollowUp(initialAnswer) {
     this.isFollowUp = true;
     this.initialAnswer = initialAnswer;
@@ -489,24 +508,19 @@ class InterviewApp {
     const intro = followUpIntros[Math.floor(Math.random() * followUpIntros.length)];
     const followUpSpeechText = `${intro} ${this.currentFollowUpQuestion}`;
     
-    this.interviewerStatus.innerHTML = `
-      <span class="w-2 h-2 rounded-full bg-tertiary"></span>
-      <span>深掘りの追加質問を読み上げています…</span>
-    `;
-
     // タイムラインに追加質問をメッセージとして追加
     this.addChatMessage("interviewer", followUpSpeechText, { isFollowUp: true });
 
     this.resetInputArea();
-    this.setInputAcceptance(false);
+    this.interviewerStatus.innerHTML = `
+      <span class="w-2 h-2 rounded-full bg-secondary"></span>
+      <span>追加質問に答えてみましょう。</span>
+    `;
 
-    this.speakText(followUpSpeechText, () => {
-      this.interviewerStatus.innerHTML = `
-        <span class="w-2 h-2 rounded-full bg-secondary"></span>
-        <span>追加質問に答えてみましょう。</span>
-      `;
+    // 追加質問は声なしのため、短い余白を挟んですぐに回答受付開始
+    setTimeout(() => {
       this.startAnsweringTurn();
-    });
+    }, 300);
   }
 
   finishCurrentQuestion(finalAnswer) {
@@ -730,11 +744,8 @@ class InterviewApp {
     const text = RESCUE_RESPONSES[type];
     if (!text) return;
 
+    this.stopAllAudio();
     this.setInputAcceptance(false);
-    this.interviewerStatus.innerHTML = `
-      <span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
-      <span>先生が答えています…</span>
-    `;
 
     // タイムラインにお助けフレーズと返答を記録
     let rescueLabel = "";
@@ -744,38 +755,106 @@ class InterviewApp {
     this.addSystemDivider(rescueLabel);
     this.addChatMessage("interviewer", text, { isFollowUp: true });
 
-    this.speakText(text, () => {
-      if (type === "repeat") {
-        const qText = this.isFollowUp ? this.currentFollowUpQuestion : this.currentQuestion.question;
-        this.speakText(qText, () => {
+    if (type === "repeat") {
+      if (this.isFollowUp) {
+        this.interviewerStatus.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-secondary"></span>
+          <span>追加質問に答えてみましょう。</span>
+        `;
+        setTimeout(() => this.startAnsweringTurn(), 300);
+      } else if (this.currentQuestion) {
+        this.interviewerStatus.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-secondary"></span>
+          <span>質問を読み上げ中…</span>
+        `;
+        this.playQuestionAudio(this.currentQuestion.id, () => {
           this.interviewerStatus.innerHTML = `
             <span class="w-2 h-2 rounded-full bg-secondary"></span>
             <span>あなたの番です。</span>
           `;
           this.startAnsweringTurn();
         });
-      } else if (type === "think") {
-        this.interviewerStatus.innerHTML = `
-          <span class="w-2 h-2 rounded-full bg-secondary"></span>
-          <span>準備ができたら話してください（お待ちしています）</span>
-        `;
-        this.startAnsweringTurn();
-      } else if (type === "restart") {
-        this.resetInputArea();
-        this.interviewerStatus.innerHTML = `
-          <span class="w-2 h-2 rounded-full bg-secondary"></span>
-          <span>深呼吸して、最初からどうぞ。</span>
-        `;
-        this.startAnsweringTurn();
       }
+    } else if (type === "think") {
+      this.interviewerStatus.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-secondary"></span>
+        <span>準備ができたら話してください（お待ちしています）</span>
+      `;
+      this.startAnsweringTurn();
+    } else if (type === "restart") {
+      this.resetInputArea();
+      this.interviewerStatus.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-secondary"></span>
+        <span>深呼吸して、最初からどうぞ。</span>
+      `;
+      this.startAnsweringTurn();
+    }
+  }
+
+  // --- 録音音声ファイルのパス取得 ---
+  getVoiceFilePath(questionId) {
+    if (!questionId) return null;
+    const num = parseInt(questionId.replace("Q", ""), 10);
+    if (isNaN(num)) return null;
+    const pad = String(num).padStart(3, "0");
+    return `VOICE/${pad}_question(Coral Reef Guide 1).wav`;
+  }
+
+  // --- 録音音声の再生制御 ---
+  playQuestionAudio(questionId, onEndCallback = null) {
+    this.stopAllAudio();
+    this.isSpeaking = true;
+
+    const audioPath = this.getVoiceFilePath(questionId);
+    if (!audioPath) {
+      this.isSpeaking = false;
+      if (onEndCallback) onEndCallback();
+      return;
+    }
+
+    const audio = new Audio(audioPath);
+    this.currentAudio = audio;
+
+    let hasFinished = false;
+    const finish = () => {
+      if (hasFinished) return;
+      hasFinished = true;
+      this.isSpeaking = false;
+      this.currentAudio = null;
+      if (onEndCallback) onEndCallback();
+    };
+
+    audio.onended = finish;
+    audio.onerror = (e) => {
+      console.warn("録音音声ファイルの読み込み/再生エラー:", audioPath, e);
+      // 録音ファイルが読み込めない場合は安全に完了コールバックへ抜ける
+      finish();
+    };
+
+    audio.play().catch(e => {
+      console.warn("音声の自動再生がブロックされたかエラーです:", e);
+      finish();
     });
+  }
+
+  // --- 全音声の停止 ---
+  stopAllAudio() {
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch(e) {}
+      this.currentAudio = null;
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    this.isSpeaking = false;
   }
 
   pauseInputAndSpeak(text) {
     this.setInputAcceptance(false);
-    this.speakText(text, () => {
-      this.startAnsweringTurn();
-    });
+    this.startAnsweringTurn();
   }
 
   updateMicUI(active) {

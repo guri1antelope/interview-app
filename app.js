@@ -17,7 +17,10 @@ class InterviewApp {
     this.isSpeaking = false;          // 先生の発話中フラグ
     this.ignoredPrefixLength = 0;     // 先生の発話中に拾った文字数（除外用）
     this.isManuallyEdited = false;    // 手動編集中フラグ
-    this.currentAudio = null;         // 録音音声再生用インスタンス
+    this.currentAudio = null;         // 録音音声再生用フォールバックインスタンス
+    this.audioCtx = null;             // Web Audio API AudioContext
+    this.audioBufferCache = new Map();// デコード済み音声バッファキャッシュ
+    this.currentAudioSource = null;   // 現在再生中の AudioBufferSourceNode
     this.currentFollowUpAudioFile = null; // 現在の追加質問音声ファイルパス
 
     // タイマー関連
@@ -91,6 +94,41 @@ class InterviewApp {
     }
   }
 
+  // --- Web Audio API 初期化（iOS User Gesture 内で呼び出してロック解除） ---
+  initAudioContext() {
+    if (!this.audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        this.audioCtx = new AudioContextClass();
+      }
+    }
+    if (this.audioCtx && this.audioCtx.state === "suspended") {
+      this.audioCtx.resume();
+    }
+  }
+
+  // --- 音声バッファの取得とデコード（メモリキャッシュ付き） ---
+  async loadAudioBuffer(url) {
+    if (!url) return null;
+    if (this.audioBufferCache.has(url)) {
+      return this.audioBufferCache.get(url);
+    }
+    this.initAudioContext();
+    if (!this.audioCtx) return null;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+      this.audioBufferCache.set(url, audioBuffer);
+      return audioBuffer;
+    } catch (e) {
+      console.warn("音声バッファの取得/デコードに失敗しました:", url, e);
+      return null;
+    }
+  }
+
   // --- 音声認識インスタンスの都度生成（※iOSのインスタンス再利用不可バグを完全回避） ---
   createRecognitionInstance() {
     if (this.recognition) {
@@ -98,13 +136,19 @@ class InterviewApp {
         this.recognition.onend = null;
         this.recognition.onerror = null;
         this.recognition.stop();
-        this.recognition.abort();
       } catch(e) {}
       this.recognition = null;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return null;
+
+    // iOS 16.4+ 録音セッション指定
+    if (navigator.audioSession) {
+      try {
+        navigator.audioSession.type = "play-and-record";
+      } catch(e) {}
+    }
 
     const rec = new SpeechRecognition();
     rec.lang = "ja-JP";
@@ -113,6 +157,9 @@ class InterviewApp {
 
     rec.onstart = () => {
       this.isRecognitionActive = true;
+      if (this.candidateStatus) {
+        this.candidateStatus.innerText = "🎙 音声を認識しています… お話しください";
+      }
     };
 
     rec.onresult = (event) => {
@@ -140,16 +187,24 @@ class InterviewApp {
       console.warn("Speech recognition error:", event.error);
       if (event.error === "not-allowed") {
         alert("マイクの使用が許可されていません。ブラウザのアドレスバーからマイクを許可してください。");
+      } else if (event.error !== "no-speech") {
+        if (this.candidateStatus) {
+          this.candidateStatus.innerText = `マイク状況: ${event.error}`;
+        }
       }
     };
 
     rec.onend = () => {
       this.isRecognitionActive = false;
-      // ユーザーが回答中（録音中）であれば自動復帰を試みる
+      // ユーザーが回答中（録音中）であれば自動復帰を試みる（iOSのセッション安定のためディレイ設定）
       if (this.isAcceptingInput && !this.isSpeaking && this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
-        try {
-          rec.start();
-        } catch(e) {}
+        setTimeout(() => {
+          if (this.isAcceptingInput && !this.isSpeaking) {
+            try {
+              rec.start();
+            } catch(e) {}
+          }
+        }, 150);
       }
     };
 
@@ -159,11 +214,18 @@ class InterviewApp {
 
   initEvents() {
     // ホーム画面
-    document.getElementById("btn-start-practice").addEventListener("click", () => this.startPracticeMode());
-    document.getElementById("btn-start-exam").addEventListener("click", () => this.startExamMode());
+    document.getElementById("btn-start-practice").addEventListener("click", () => {
+      this.initAudioContext();
+      this.startPracticeMode();
+    });
+    document.getElementById("btn-start-exam").addEventListener("click", () => {
+      this.initAudioContext();
+      this.startExamMode();
+    });
     
     // 再生ボタン
     this.btnReplay.addEventListener("click", () => {
+      this.initAudioContext();
       if (this.isFollowUp) {
         if (this.currentFollowUpAudioFile) {
           this.setInputAcceptance(false);
@@ -285,11 +347,15 @@ class InterviewApp {
         this.recognition.onend = null;
         this.recognition.onerror = null;
         this.recognition.stop();
-        this.recognition.abort();
       } catch(e) {}
       this.recognition = null; // 破棄して次回のターンで新しく作り直す
     }
     this.isRecognitionActive = false;
+    if (navigator.audioSession) {
+      try {
+        navigator.audioSession.type = "playback";
+      } catch(e) {}
+    }
   }
 
   setInputAcceptance(accepting) {
@@ -534,6 +600,7 @@ class InterviewApp {
 
   // --- アクションボタンクリック処理（タップして話す / 送信の分岐） ---
   handleActionClick() {
+    this.initAudioContext();
     if (this.isSpeaking) return;
 
     if (!this.isAcceptingInput) {
@@ -669,6 +736,7 @@ class InterviewApp {
 
     this.feedbackModal.classList.remove("hidden");
     this.btnModalNext.onclick = () => {
+      this.initAudioContext();
       this.feedbackModal.classList.add("hidden");
       this.nextQuestion();
     };
@@ -905,12 +973,18 @@ class InterviewApp {
     this.playAudioFile(audioPath, onEndCallback);
   }
 
-  // --- 汎用音声ファイルの再生制御 ---
-  playAudioFile(audioPath, onEndCallback = null) {
+  // --- 音声ファイルの再生制御（Web Audio API 主軸 / HTMLAudio フォールバック） ---
+  async playAudioFile(audioPath, onEndCallback = null) {
     this.stopAllAudio();
     this.stopRecognitionCompletely(); // 先生の発話中はマイクを完全に切る
     this.isSpeaking = true;
     this.setInputAcceptance(false);
+
+    if (navigator.audioSession) {
+      try {
+        navigator.audioSession.type = "playback";
+      } catch(e) {}
+    }
 
     if (!audioPath) {
       this.isSpeaking = false;
@@ -918,6 +992,44 @@ class InterviewApp {
       return;
     }
 
+    this.initAudioContext();
+
+    // 1. Web Audio API が使用可能な場合は AudioContext で再生（iOSオーディオ排他ロック競合を完全回避）
+    if (this.audioCtx) {
+      try {
+        const buffer = await this.loadAudioBuffer(audioPath);
+        if (!buffer) {
+          this.isSpeaking = false;
+          if (onEndCallback) onEndCallback();
+          return;
+        }
+
+        // ロード中にユーザーが画面離脱またはスキップした場合は再生中止
+        if (!this.isSpeaking) return;
+
+        const source = this.audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(this.audioCtx.destination);
+        this.currentAudioSource = source;
+
+        let hasFinished = false;
+        const finish = () => {
+          if (hasFinished) return;
+          hasFinished = true;
+          this.isSpeaking = false;
+          this.currentAudioSource = null;
+          if (onEndCallback) onEndCallback();
+        };
+
+        source.onended = finish;
+        source.start(0);
+        return;
+      } catch (err) {
+        console.warn("Web Audio API 再生エラー、フォールバックを試みます:", err);
+      }
+    }
+
+    // 2. フォールバック（HTMLAudioElement）
     const audio = new Audio(audioPath);
     this.currentAudio = audio;
 
@@ -929,7 +1041,7 @@ class InterviewApp {
       if (this.currentAudio) {
         try {
           this.currentAudio.pause();
-          this.currentAudio.src = ""; // iOSのオーディオセッションロックを完全解放
+          this.currentAudio.src = "";
         } catch(e) {}
         this.currentAudio = null;
       }
@@ -950,11 +1062,18 @@ class InterviewApp {
 
   // --- 全音声の停止 ---
   stopAllAudio() {
+    if (this.currentAudioSource) {
+      try {
+        this.currentAudioSource.onended = null;
+        this.currentAudioSource.stop();
+      } catch(e) {}
+      this.currentAudioSource = null;
+    }
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
-        this.currentAudio.src = ""; // iOSのオーディオセッションロックを完全解放
+        this.currentAudio.src = ""; // iOSのオーディオセッションロックを解放
       } catch(e) {}
       this.currentAudio = null;
     }

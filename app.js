@@ -86,56 +86,75 @@ class InterviewApp {
 
   initSpeech() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      this.recognition = new SpeechRecognition();
-      this.recognition.lang = "ja-JP";
-      this.recognition.continuous = true;
-      this.recognition.interimResults = true;
-
-      this.recognition.onstart = () => {
-        this.isRecognitionActive = true;
-      };
-
-      this.recognition.onresult = (event) => {
-        // 先生が話している間、または入力受付前は絶対に処理しない
-        if (!this.isAcceptingInput || this.isSpeaking) {
-          return;
-        }
-
-        // 手動編集された後は、音声認識による自動上書きを行わない
-        if (this.isManuallyEdited) {
-          return;
-        }
-
-        // 今回のターンの発話テキストを抽出
-        let turnText = "";
-        for (let i = 0; i < event.results.length; ++i) {
-          turnText += event.results[i][0].transcript;
-        }
-
-        this.speechTranscript.value = turnText;
-        this.charCount.innerText = `${turnText.length} 文字`;
-      };
-
-      this.recognition.onerror = (event) => {
-        console.warn("Speech recognition error:", event.error);
-        if (event.error === "not-allowed") {
-          alert("マイクの使用が許可されていません。ブラウザのアドレスバーからマイクを許可してください。");
-        }
-      };
-
-      this.recognition.onend = () => {
-        this.isRecognitionActive = false;
-        // 入力受付中かつ先生の発話中でない場合のみ再起動を試みる
-        if (this.isAcceptingInput && !this.isSpeaking && this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
-          try {
-            this.recognition.start();
-          } catch(e) {}
-        }
-      };
-    } else {
+    if (!SpeechRecognition) {
       console.warn("Web Speech Recognition is not supported in this browser.");
     }
+  }
+
+  // --- 音声認識インスタンスの都度生成（※iOSのインスタンス再利用不可バグを完全回避） ---
+  createRecognitionInstance() {
+    if (this.recognition) {
+      try {
+        this.recognition.onend = null;
+        this.recognition.onerror = null;
+        this.recognition.stop();
+        this.recognition.abort();
+      } catch(e) {}
+      this.recognition = null;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+
+    const rec = new SpeechRecognition();
+    rec.lang = "ja-JP";
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    rec.onstart = () => {
+      this.isRecognitionActive = true;
+    };
+
+    rec.onresult = (event) => {
+      // 先生が話している間、または入力受付前は処理しない
+      if (!this.isAcceptingInput || this.isSpeaking) {
+        return;
+      }
+
+      // 手動編集された後は、音声認識による自動上書きを行わない
+      if (this.isManuallyEdited) {
+        return;
+      }
+
+      // 今回のターンの発話テキストを抽出
+      let turnText = "";
+      for (let i = 0; i < event.results.length; ++i) {
+        turnText += event.results[i][0].transcript;
+      }
+
+      this.speechTranscript.value = turnText;
+      this.charCount.innerText = `${turnText.length} 文字`;
+    };
+
+    rec.onerror = (event) => {
+      console.warn("Speech recognition error:", event.error);
+      if (event.error === "not-allowed") {
+        alert("マイクの使用が許可されていません。ブラウザのアドレスバーからマイクを許可してください。");
+      }
+    };
+
+    rec.onend = () => {
+      this.isRecognitionActive = false;
+      // ユーザーが回答中（録音中）であれば自動復帰を試みる
+      if (this.isAcceptingInput && !this.isSpeaking && this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
+        try {
+          rec.start();
+        } catch(e) {}
+      }
+    };
+
+    this.recognition = rec;
+    return rec;
   }
 
   initEvents() {
@@ -247,11 +266,14 @@ class InterviewApp {
   }
 
   ensureRecognitionActive() {
-    if (!this.recognition) return;
-    if (!this.isRecognitionActive) {
+    // iOS対策：毎回フレッシュな音声認識インスタンスをゼロから生成して起動
+    const rec = this.createRecognitionInstance();
+    if (rec) {
       try {
-        this.recognition.start();
-      } catch (e) {}
+        rec.start();
+      } catch (e) {
+        console.warn("Recognition start failed:", e);
+      }
     }
   }
 
@@ -260,10 +282,14 @@ class InterviewApp {
     this.updateMicUI(false);
     if (this.recognition) {
       try {
+        this.recognition.onend = null;
+        this.recognition.onerror = null;
         this.recognition.stop();
         this.recognition.abort();
       } catch(e) {}
+      this.recognition = null; // 破棄して次回のターンで新しく作り直す
     }
+    this.isRecognitionActive = false;
   }
 
   setInputAcceptance(accepting) {
@@ -900,7 +926,13 @@ class InterviewApp {
       if (hasFinished) return;
       hasFinished = true;
       this.isSpeaking = false;
-      this.currentAudio = null;
+      if (this.currentAudio) {
+        try {
+          this.currentAudio.pause();
+          this.currentAudio.src = ""; // iOSのオーディオセッションロックを完全解放
+        } catch(e) {}
+        this.currentAudio = null;
+      }
       if (onEndCallback) onEndCallback();
     };
 
@@ -922,6 +954,7 @@ class InterviewApp {
       try {
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
+        this.currentAudio.src = ""; // iOSのオーディオセッションロックを完全解放
       } catch(e) {}
       this.currentAudio = null;
     }

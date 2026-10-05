@@ -657,26 +657,33 @@ class InterviewApp {
 
     const addNumStr = String(randomIndex + 1).padStart(2, "0");
     this.currentFollowUpAudioFile = `VOICE/${this.currentQuestion.id}_add${addNumStr}.wav`;
-    
-    // タイムラインに追加質問をメッセージとして追加
-    this.addChatMessage("interviewer", this.currentFollowUpQuestion, { isFollowUp: true });
 
     this.resetInputArea();
     this.setInputAcceptance(false);
     this.updateActionButton("speaking");
     this.interviewerStatus.innerHTML = `
       <span class="w-2 h-2 rounded-full bg-tertiary"></span>
-      <span>追加質問を読み上げています…</span>
+      <span>回答を確認しています…</span>
     `;
 
-    // 音声ファイルを再生
-    this.playAudioFile(this.currentFollowUpAudioFile, () => {
+    // iOSマイク回路の完全解放（約500ms）を待ってから追加質問を開始
+    setTimeout(() => {
+      // タイムラインに追加質問をメッセージとして追加
+      this.addChatMessage("interviewer", this.currentFollowUpQuestion, { isFollowUp: true });
       this.interviewerStatus.innerHTML = `
-        <span class="w-2 h-2 rounded-full bg-secondary"></span>
-        <span>追加質問に答えてみましょう。</span>
+        <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+        <span>追加質問を読み上げています…</span>
       `;
-      this.startAnsweringTurn();
-    });
+
+      // 音声ファイルを再生
+      this.playAudioFile(this.currentFollowUpAudioFile, () => {
+        this.interviewerStatus.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-secondary"></span>
+          <span>追加質問に答えてみましょう。</span>
+        `;
+        this.startAnsweringTurn();
+      });
+    }, 500);
   }
 
   finishCurrentQuestion(finalAnswer) {
@@ -698,7 +705,7 @@ class InterviewApp {
     if (this.currentMode === "practice") {
       this.showInstantFeedbackModal(feedback);
     } else {
-      this.nextQuestion();
+      setTimeout(() => this.nextQuestion(), 500);
     }
   }
 

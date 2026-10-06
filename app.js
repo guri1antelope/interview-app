@@ -1579,10 +1579,25 @@ class InterviewApp {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password })
+      }).catch(() => {
+        throw new Error("サーバーと通信できませんでした。インターネット接続をご確認ください。");
       });
-      const data = await res.json();
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        if (res.status === 404) {
+          throw new Error("サーバーと通信できませんでした。インターネット接続をご確認ください。");
+        }
+        throw new Error("通信エラーが発生しました。もう一度お試しください。");
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || "ユーザー名またはパスワードが正しくありません。");
+        if (res.status === 401) {
+          throw new Error(data?.error || "ユーザー名またはパスワードが正しくありません。");
+        }
+        throw new Error(data?.error || "ログインに失敗しました。");
       }
 
       this.authToken = data.token;

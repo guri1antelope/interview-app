@@ -1220,28 +1220,48 @@ class InterviewApp {
       }
 
       const report = data.report;
+      const goodPoints = report.goodPointsDetail || report.overallReview || "";
+      const improvement = report.improvementAdviceDetail || "";
+      const manner = report.mannerAdviceDetail || report.overallMannerAdvice || "";
 
-      // 1. 上部の総合講評カードを更新
+      // 1. 上部の総合講評カードを3つの充実したカードで更新
       container.innerHTML = `
         <div class="space-y-3">
           <div class="flex items-center gap-2 text-primary font-bold text-sm sm:text-base border-b border-primary/15 pb-2">
             <span class="material-symbols-outlined text-[20px] text-secondary">workspace_premium</span>
-            <span>面接官からの総合講評</span>
+            <span>面接官からの総合講評・詳細アドバイス</span>
           </div>
 
-          <!-- 全体の総括レビュー -->
-          <div class="p-3.5 rounded-xl bg-surface-container-lowest border border-primary/15 shadow-xs space-y-1">
-            <p class="text-xs sm:text-sm text-on-surface leading-relaxed whitespace-pre-wrap font-medium">${report.overallReview}</p>
-          </div>
-
-          <!-- 全体の話し方音声分析アドバイス -->
-          ${report.overallMannerAdvice ? `
-          <div class="p-3.5 rounded-xl bg-primary-fixed/20 border border-primary/25 shadow-xs space-y-1">
-            <h5 class="text-xs font-bold text-primary flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[16px] text-primary">record_voice_over</span>
-              <span>話し方・音声分析の総括アドバイス</span>
+          <!-- 1. 良かった点（実際の回答を引用して評価） -->
+          ${goodPoints ? `
+          <div class="p-3.5 sm:p-4 rounded-xl bg-secondary-fixed/30 border border-secondary/30 shadow-xs space-y-1.5">
+            <h5 class="text-xs sm:text-sm font-bold text-secondary flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[17px]">verified</span>
+              <span>良かった点（具体的評価）</span>
             </h5>
-            <p class="text-xs sm:text-sm text-on-surface leading-relaxed whitespace-pre-wrap">${report.overallMannerAdvice}</p>
+            <p class="text-xs sm:text-sm text-on-surface leading-relaxed whitespace-pre-wrap">${goodPoints}</p>
+          </div>
+          ` : ""}
+
+          <!-- 2. もっと良くなる改善案（ビフォー・アフター具体例） -->
+          ${improvement ? `
+          <div class="p-3.5 sm:p-4 rounded-xl bg-amber-50/80 border border-amber-200/90 shadow-xs space-y-1.5">
+            <h5 class="text-xs sm:text-sm font-bold text-tertiary flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[17px]">tips_and_updates</span>
+              <span>もっと良くなる改善案（ビフォー・アフター具体例）</span>
+            </h5>
+            <p class="text-xs sm:text-sm text-on-surface leading-relaxed whitespace-pre-wrap">${improvement}</p>
+          </div>
+          ` : ""}
+
+          <!-- 3. 話し方のアドバイス（全体のトーン ＆ 設問別改善） -->
+          ${manner ? `
+          <div class="p-3.5 sm:p-4 rounded-xl bg-primary-fixed/20 border border-primary/25 shadow-xs space-y-1.5">
+            <h5 class="text-xs sm:text-sm font-bold text-primary flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[17px]">record_voice_over</span>
+              <span>話し方のアドバイス（全体＆設問別アドバイス）</span>
+            </h5>
+            <p class="text-xs sm:text-sm text-on-surface leading-relaxed whitespace-pre-wrap">${manner}</p>
           </div>
           ` : ""}
         </div>

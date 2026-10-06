@@ -406,22 +406,22 @@
   </div>
 
   <!-- ==================== 4. 練習モード 即時フィードバックモーダル ==================== -->
-  <div id="feedback-modal" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-    <div class="bg-surface-container-lowest rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
-      <div class="flex items-center justify-between border-b border-surface-container-low pb-2.5">
+  <div id="feedback-modal" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+    <div class="bg-surface-container-lowest rounded-2xl max-w-md w-full max-h-[94vh] flex flex-col p-3.5 sm:p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex-shrink-0 flex items-center justify-between border-b border-surface-container-low pb-2 mb-1.5">
         <div class="flex items-center gap-2">
-          <span class="w-7 h-7 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center">
-            <span class="material-symbols-outlined text-[16px]">verified</span>
+          <span class="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center">
+            <span class="material-symbols-outlined text-[15px] sm:text-[16px]">verified</span>
           </span>
-          <h3 class="font-bold text-primary text-sm sm:text-base">ワンポイントアドバイス</h3>
+          <h3 class="font-bold text-primary text-xs sm:text-sm">ワンポイントアドバイス</h3>
         </div>
       </div>
 
-      <div id="modal-feedback-content">
+      <div id="modal-feedback-content" class="overflow-y-auto flex-1 pr-0.5 space-y-2">
         <!-- JSで生成 -->
       </div>
 
-      <button id="btn-modal-next" class="w-full py-3 rounded-xl bg-secondary text-on-secondary font-bold hover:bg-opacity-95 transition-all shadow-md text-sm sm:text-base">
+      <button id="btn-modal-next" class="flex-shrink-0 w-full py-2.5 sm:py-3 mt-2 rounded-xl bg-secondary text-on-secondary font-bold hover:bg-opacity-95 transition-all shadow-md text-xs sm:text-sm active:scale-95 cursor-pointer">
         次の質問へ進む
       </button>
     </div>
@@ -462,7 +462,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="questions.js?v=20261006_v3"></script>
-  <script src="app.js?v=20261006_v3"></script>
+  <script src="questions.js?v=20261006_v4"></script>
+  <script src="app.js?v=20261006_v4"></script>
 </body>
 </html>

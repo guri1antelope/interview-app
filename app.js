@@ -903,32 +903,32 @@ class InterviewApp {
 
   showInstantFeedbackModal(feedback) {
     this.modalFeedbackContent.innerHTML = `
-      <div class="space-y-3">
-        <div class="p-3.5 rounded-xl bg-secondary-fixed/40 border border-secondary/30">
-          <h4 class="font-bold text-secondary text-xs sm:text-sm mb-0.5">良かった点</h4>
-          <p class="text-xs sm:text-sm text-on-surface leading-relaxed">${feedback.goodPoint}</p>
+      <div class="space-y-2">
+        <div class="p-2.5 sm:p-3 rounded-xl bg-secondary-fixed/40 border border-secondary/30">
+          <h4 class="font-bold text-secondary text-[11px] sm:text-xs mb-0.5">良かった点</h4>
+          <p class="text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap">${feedback.goodPoint}</p>
         </div>
-        <div class="p-3.5 rounded-xl bg-tertiary-container/20 border border-tertiary/30">
-          <h4 class="font-bold text-tertiary text-xs sm:text-sm mb-0.5">もっと良くなるアドバイス</h4>
-          <p class="text-xs sm:text-sm text-on-surface leading-relaxed">${feedback.advice}</p>
+        <div class="p-2.5 sm:p-3 rounded-xl bg-tertiary-container/20 border border-tertiary/30">
+          <h4 class="font-bold text-tertiary text-[11px] sm:text-xs mb-0.5">もっと良くなるアドバイス</h4>
+          <p class="text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap">${feedback.advice}</p>
         </div>
         ${feedback.mannerFeedback ? `
-        <div class="p-3.5 rounded-xl bg-primary-fixed/20 border border-primary/20">
-          <h4 class="font-bold text-primary text-xs sm:text-sm mb-0.5">話し方のポイント（音声分析）</h4>
-          <p class="text-xs sm:text-sm text-on-surface leading-relaxed">${feedback.mannerFeedback}</p>
+        <div class="p-2.5 sm:p-3 rounded-xl bg-primary-fixed/20 border border-primary/20">
+          <h4 class="font-bold text-primary text-[11px] sm:text-xs mb-0.5">話し方のポイント（音声分析）</h4>
+          <p class="text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap">${feedback.mannerFeedback}</p>
         </div>
         ` : ""}
-        <div class="grid grid-cols-3 gap-2 text-center text-caption pt-1">
-          <div class="p-2 rounded-lg bg-surface-container">
-            <p class="text-outline text-[10px]">結論ファースト</p>
+        <div class="grid grid-cols-3 gap-1.5 text-center text-caption pt-0.5">
+          <div class="p-1.5 rounded-lg bg-surface-container">
+            <p class="text-outline text-[9px] sm:text-[10px]">結論ファースト</p>
             <p class="font-bold text-primary text-xs sm:text-sm">${feedback.isConclusionFirst ? "⭕ できてる" : "🔺 意識しよう"}</p>
           </div>
-          <div class="p-2 rounded-lg bg-surface-container">
-            <p class="text-outline text-[10px]">キーワード</p>
+          <div class="p-1.5 rounded-lg bg-surface-container">
+            <p class="text-outline text-[9px] sm:text-[10px]">キーワード</p>
             <p class="font-bold text-secondary text-xs sm:text-sm">${feedback.matchedKeywords && feedback.matchedKeywords.length > 0 ? "⭕バッチリ" : "🔺もう少し"}</p>
           </div>
-          <div class="p-2 rounded-lg bg-surface-container">
-            <p class="text-outline text-[10px]">ボリューム</p>
+          <div class="p-1.5 rounded-lg bg-surface-container">
+            <p class="text-outline text-[9px] sm:text-[10px]">ボリューム</p>
             <p class="font-bold text-primary text-xs sm:text-sm">${feedback.volumeCheck}</p>
           </div>
         </div>

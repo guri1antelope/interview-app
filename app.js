@@ -1063,7 +1063,7 @@ class InterviewApp {
   }
 
   // --- 結果画面表示 ---
-  showResultScreen() {
+  async showResultScreen() {
     this.setInputAcceptance(false);
     this.stopRecognitionCompletely();
     this.stopTimer();
@@ -1074,26 +1074,39 @@ class InterviewApp {
 
     const totalQuestions = this.sessionAnswers.length;
     const conclusionCount = this.sessionAnswers.filter(a => a.feedback.isConclusionFirst).length;
+    const userName = this.currentUsername || "受検生";
+    const userInitial = userName.charAt(0) || "受";
 
     resultSummary.innerHTML = `
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="p-4 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container text-center">
-          <p class="text-xs text-on-surface-variant font-medium">回答設問数</p>
-          <p class="text-2xl font-bold text-primary mt-0.5">${totalQuestions} <span class="text-xs">問</span></p>
+      <div class="space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+          <div class="p-3.5 sm:p-4 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container text-center">
+            <p class="text-xs text-on-surface-variant font-medium">回答設問数</p>
+            <p class="text-xl sm:text-2xl font-bold text-primary mt-0.5">${totalQuestions} <span class="text-xs">問</span></p>
+          </div>
+          <div class="p-3.5 sm:p-4 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container text-center">
+            <p class="text-xs text-on-surface-variant font-medium">結論ファースト率</p>
+            <p class="text-xl sm:text-2xl font-bold text-secondary mt-0.5">${Math.round((conclusionCount / (totalQuestions || 1)) * 100)} <span class="text-xs">%</span></p>
+          </div>
+          <div class="p-3.5 sm:p-4 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container text-center">
+            <p class="text-xs text-on-surface-variant font-medium">受検者</p>
+            <p class="text-base sm:text-lg font-bold text-primary mt-1">${userName}さん</p>
+          </div>
         </div>
-        <div class="p-4 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container text-center">
-          <p class="text-xs text-on-surface-variant font-medium">結論ファースト率</p>
-          <p class="text-2xl font-bold text-secondary mt-0.5">${Math.round((conclusionCount / totalQuestions) * 100)} <span class="text-xs">%</span></p>
-        </div>
-        <div class="p-4 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container text-center">
-          <p class="text-xs text-on-surface-variant font-medium">総評</p>
-          <p class="text-base font-bold text-tertiary mt-1">大変よく頑張りました！</p>
+
+        <!-- 面接全体の総合講評コンテナ（非同期ローディング） -->
+        <div id="overall-report-container" class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-primary-container/10 via-surface-container-low to-secondary/10 border border-primary/20 shadow-xs space-y-3">
+          <div class="flex items-center gap-2 text-primary font-bold text-xs sm:text-sm">
+            <span class="material-symbols-outlined text-[20px] animate-spin text-secondary">sync</span>
+            <span>面接官が3問全体の総合講評・詳細アドバイスを作成中…</span>
+          </div>
+          <p class="text-[11px] text-on-surface-variant">あなたの回答内容と話し方を総合的に分析しています。少々お待ちください。</p>
         </div>
       </div>
     `;
 
     resultList.innerHTML = this.sessionAnswers.map((item, idx) => `
-      <div class="bg-surface-container-lowest rounded-2xl p-4 sm:p-5 shadow-sm border border-surface-container space-y-3">
+      <div id="result-card-${idx}" class="bg-surface-container-lowest rounded-2xl p-4 sm:p-5 shadow-sm border border-surface-container space-y-3">
         <!-- 設問ヘッダー -->
         <div class="flex items-center justify-between border-b border-surface-container pb-2">
           <span class="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant text-[11px] font-bold">
@@ -1106,41 +1119,41 @@ class InterviewApp {
         </div>
 
         <!-- LINE風 やり取り履歴タイムライン -->
-        <div class="p-3.5 bg-surface-container-low rounded-xl space-y-2.5 border border-surface-variant/30">
+        <div class="p-3 bg-surface-container-low rounded-xl space-y-2 border border-surface-variant/30">
           <!-- 1. 先生の質問 -->
           <div class="flex items-start gap-2 max-w-[95%]">
             <div class="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">先</div>
             <div class="space-y-0.5">
               <span class="text-[10px] font-bold text-primary">先生の質問</span>
-              <div class="p-2.5 rounded-xl rounded-tl-none bg-surface-container-lowest text-on-surface shadow-xs border border-surface-container text-xs sm:text-sm">「${item.question.question.trim()}」</div>
+              <div class="p-2.5 rounded-xl rounded-tl-none bg-surface-container-lowest text-on-surface shadow-xs border border-surface-container text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">「${item.question.question.trim()}」</div>
             </div>
           </div>
 
-          <!-- 2. Aさんの回答 -->
+          <!-- 2. 受検生の回答 -->
           <div class="flex items-start gap-2 max-w-[95%] ml-auto flex-row-reverse">
-            <div class="w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">A</div>
+            <div class="w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">${userInitial}</div>
             <div class="space-y-0.5 text-right">
-              <span class="text-[10px] font-bold text-secondary">Aさんの回答</span>
-              <div class="p-2.5 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm text-left">「${(item.initialAnswer || "（無回答）").trim()}」</div>
+              <span class="text-[10px] font-bold text-secondary">${userName}さんの回答</span>
+              <div class="p-2.5 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm text-left leading-relaxed whitespace-pre-wrap">「${(item.initialAnswer || "（無回答）").trim()}」</div>
             </div>
           </div>
 
           <!-- 3. 追加質問＆回答（あれば） -->
           ${item.followUpQuestion ? `
-            <div class="pt-2 border-t border-surface-variant/30 space-y-2.5">
+            <div class="pt-2 border-t border-surface-variant/30 space-y-2">
               <div class="flex items-start gap-2 max-w-[95%]">
                 <div class="w-6 h-6 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">追</div>
                 <div class="space-y-0.5">
                   <span class="text-[10px] font-bold text-tertiary">追加質問</span>
-                  <div class="p-2.5 rounded-xl rounded-tl-none bg-amber-50/50 text-on-surface shadow-xs border border-tertiary/30 text-xs sm:text-sm">「${item.followUpQuestion.trim()}」</div>
+                  <div class="p-2.5 rounded-xl rounded-tl-none bg-amber-50/60 text-on-surface shadow-xs border border-tertiary/30 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">「${item.followUpQuestion.trim()}」</div>
                 </div>
               </div>
 
               <div class="flex items-start gap-2 max-w-[95%] ml-auto flex-row-reverse">
-                <div class="w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">A</div>
+                <div class="w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">${userInitial}</div>
                 <div class="space-y-0.5 text-right">
-                  <span class="text-[10px] font-bold text-secondary">Aさんの追加回答</span>
-                  <div class="p-2.5 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm text-left">「${(item.followUpAnswer || "（無回答）").trim()}」</div>
+                  <span class="text-[10px] font-bold text-secondary">${userName}さんの追加回答</span>
+                  <div class="p-2.5 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm text-left leading-relaxed whitespace-pre-wrap">「${(item.followUpAnswer || "（無回答）").trim()}」</div>
                 </div>
               </div>
             </div>
@@ -1149,30 +1162,124 @@ class InterviewApp {
 
         <!-- 評価＆アドバイス -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-          <div class="p-3 bg-secondary-fixed/20 rounded-xl text-on-secondary-fixed-variant border border-secondary/20">
-            <p class="font-bold mb-0.5 flex items-center gap-1">
+          <div class="p-2.5 bg-secondary-fixed/20 rounded-xl text-on-secondary-fixed-variant border border-secondary/20">
+            <p class="font-bold mb-0.5 flex items-center gap-1 text-[11px] sm:text-xs">
               <span class="text-secondary font-bold">✔</span> 良かった点
             </p>
-            <p class="leading-relaxed">${item.feedback.goodPoint}</p>
+            <p class="leading-snug">${item.feedback.goodPoint}</p>
           </div>
-          <div class="p-3 bg-tertiary-container/20 rounded-xl text-on-tertiary-container border border-tertiary/20">
-            <p class="font-bold mb-0.5 flex items-center gap-1">
+          <div class="p-2.5 bg-tertiary-container/20 rounded-xl text-on-tertiary-container border border-tertiary/20">
+            <p class="font-bold mb-0.5 flex items-center gap-1 text-[11px] sm:text-xs">
               <span class="text-tertiary font-bold">💡</span> 次へのアドバイス
             </p>
-            <p class="leading-relaxed">${item.feedback.advice}</p>
+            <p class="leading-snug">${item.feedback.advice}</p>
           </div>
         </div>
 
         ${item.feedback.mannerFeedback ? `
-        <div class="p-3 bg-primary-fixed/20 rounded-xl text-on-primary-fixed-variant border border-primary/20 text-xs">
-          <p class="font-bold mb-0.5 flex items-center gap-1">
-            <span class="text-primary font-bold">🎙</span> 話し方のポイント（音声分析）
+        <div class="p-2.5 bg-primary-fixed/20 rounded-xl text-on-primary-fixed-variant border border-primary/20 text-xs">
+          <p class="font-bold mb-0.5 flex items-center gap-1 text-[11px] sm:text-xs">
+            <span class="text-primary font-bold">🎙</span> 話し方のポイント
           </p>
-          <p class="leading-relaxed text-on-surface">${item.feedback.mannerFeedback}</p>
+          <p class="leading-snug text-on-surface">${item.feedback.mannerFeedback}</p>
         </div>
         ` : ""}
+
+        <!-- 詳細具体例コンテナ（AI総合レポート取得後に挿入） -->
+        <div id="deep-advice-container-${idx}" class="hidden pt-1"></div>
       </div>
     `).join("");
+
+    // 面接全体の詳細振り返りレポートを非同期取得
+    this.loadOverallFeedbackReport();
+  }
+
+  async loadOverallFeedbackReport() {
+    const container = document.getElementById("overall-report-container");
+    if (!container || this.sessionAnswers.length === 0) return;
+
+    try {
+      const response = await fetch("/api/overall-feedback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.authToken || ""}`
+        },
+        body: JSON.stringify({
+          sessionAnswers: this.sessionAnswers
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (!data.success || !data.report) {
+        throw new Error(data.error || "Report generation failed");
+      }
+
+      const report = data.report;
+
+      // 1. 上部の総合講評カードを更新
+      container.innerHTML = `
+        <div class="space-y-3">
+          <div class="flex items-center gap-2 text-primary font-bold text-sm sm:text-base border-b border-primary/15 pb-2">
+            <span class="material-symbols-outlined text-[20px] text-secondary">workspace_premium</span>
+            <span>面接官からの総合講評</span>
+          </div>
+
+          <!-- 全体の総括レビュー -->
+          <div class="p-3.5 rounded-xl bg-surface-container-lowest border border-primary/15 shadow-xs space-y-1">
+            <p class="text-xs sm:text-sm text-on-surface leading-relaxed whitespace-pre-wrap font-medium">${report.overallReview}</p>
+          </div>
+
+          <!-- 全体の話し方音声分析アドバイス -->
+          ${report.overallMannerAdvice ? `
+          <div class="p-3.5 rounded-xl bg-primary-fixed/20 border border-primary/25 shadow-xs space-y-1">
+            <h5 class="text-xs font-bold text-primary flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px] text-primary">record_voice_over</span>
+              <span>話し方・音声分析の総括アドバイス</span>
+            </h5>
+            <p class="text-xs sm:text-sm text-on-surface leading-relaxed whitespace-pre-wrap">${report.overallMannerAdvice}</p>
+          </div>
+          ` : ""}
+        </div>
+      `;
+
+      // 2. 各設問カードに「詳しい深掘りアドバイス＆改善具体例」を追加
+      if (Array.isArray(report.questionDetails)) {
+        report.questionDetails.forEach((detail, idx) => {
+          const detailContainer = document.getElementById(`deep-advice-container-${idx}`);
+          if (detailContainer && (detail.deepAdvice || detail.concreteExample)) {
+            detailContainer.className = "pt-2 border-t border-surface-container space-y-2";
+            detailContainer.innerHTML = `
+              <div class="p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-1.5 text-xs">
+                <p class="font-bold text-tertiary flex items-center gap-1 text-[11px] sm:text-xs">
+                  <span class="material-symbols-outlined text-[15px]">auto_stories</span>
+                  <span>面接官の深掘り解説と具体例</span>
+                </p>
+                ${detail.deepAdvice ? `<p class="text-on-surface leading-relaxed text-xs">${detail.deepAdvice}</p>` : ""}
+                ${detail.concreteExample ? `
+                <div class="p-2.5 rounded-lg bg-surface-container-lowest border border-amber-200/60 mt-1">
+                  <span class="text-[10px] font-bold text-secondary block mb-0.5">🌟 おすすめの回答例・フレーズ</span>
+                  <p class="text-on-surface-variant leading-relaxed text-xs">「${detail.concreteExample}」</p>
+                </div>
+                ` : ""}
+              </div>
+            `;
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("総合レポート取得エラー:", err);
+      container.innerHTML = `
+        <div class="flex items-center gap-2 text-primary font-bold text-xs sm:text-sm">
+          <span class="material-symbols-outlined text-[18px] text-tertiary">info</span>
+          <span>各設問のアドバイスを振り返り、本番に向けて復習してみましょう！</span>
+        </div>
+      `;
+    }
   }
 
   // --- お助けフレーズの処理 ---

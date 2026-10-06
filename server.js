@@ -189,12 +189,13 @@ function evaluateAudioWithGemini(audioBase64, mimeType, questionData, userText) 
 ${userText ? `【補足・入力テキスト】: ${userText}` : ''}
 
 以下の要件に従い、必ず指定のJSON形式のみで出力してください:
+※練習のテンポを落とさず即座に次へ進めるよう、長文は書かず各項目とも短く的確にまとめてください（面接終了後に詳しい総合レポートを作成します）。
 1. transcript: 音声から聞き取った正確な発話内容（文字起こし）。もし音声が無音や聞き取れない場合は補足テキストを基にするかその旨を記載。
 2. isConclusionFirst: 冒頭で結論（「〜だからです」「理由は〜です」等）を言えているか (boolean: true または false)。
 3. volumeEvaluation: 発話量の適切さ ("短め", "ちょうど良い", "長め" のいずれか)。
-4. goodPoint: 良かった点（小学6年生の努力や熱意を温かく具体的に褒めるコメント）。
-5. advice: もっと良くなるアドバイス（次回より説得力が増す具体的な工夫）。
-6. mannerFeedback: 話し方のアドバイス（話すテンポ、間の取り方、声のハキハキ度、自信や抑揚など）。
+4. goodPoint: 良かった点（小学6年生向けに温かく、1〜2行・40〜60文字程度で簡潔に）。
+5. advice: もっと良くなるアドバイス（一番直してほしいポイントを1点、1〜2行・50〜70文字程度で）。
+6. mannerFeedback: 話し方のポイント（声の抑揚・速さ・ハキハキ度などを、1行・30文字以内で端的に）。
 7. matchedKeywords: 発話内容に含まれていた重要キーワードの配列。
 
 JSONフォーマット:
@@ -262,6 +263,93 @@ JSONフォーマット:
       reject(new Error('Gemini API request timed out'));
     });
 
+    req.write(payload);
+    req.end();
+  });
+}
+
+// Gemini API による面接全体の詳細振り返りレポート生成
+function generateOverallFeedbackWithGemini(sessionAnswers) {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return reject(new Error('GEMINI_API_KEY is not configured'));
+
+    const interviewSummary = sessionAnswers.map((item, idx) => {
+      const q = item.question || {};
+      return `【第 ${idx + 1} 問】
+・カテゴリー: ${q.category || ''}
+・質問: ${q.question || ''}
+・出題意図: ${q.intent || ''}
+・受検者の回答: ${item.initialAnswer || '（無回答）'}
+${item.followUpQuestion ? `・面接官の追加質問: ${item.followUpQuestion}\n・追加質問への回答: ${item.followUpAnswer || '（無回答）'}` : ''}
+・所要時間: ${item.elapsedSeconds || 0}秒`;
+    }).join('\n\n');
+
+    const promptText = `あなたは新潟市立高志中等教育学校の入学者選抜（面接）の主任面接官・指導責任者です。
+以下は、受検生（小学6年生）が実施した模擬面接（全${sessionAnswers.length}問）の全やり取りの記録です。
+
+${interviewSummary}
+
+面接全体をじっくり振り返り、受検生が本番で自信を持って挑めるよう、温かく、かつ具体的で実践的な「詳細振り返りレポート」を作成してください。
+以下の要件に従い、必ず指定のJSON形式のみで出力してください:
+
+1. overallReview: 3問全体の総括講評（受検生の強み、意欲の伝わり方、本番への心構えを温かく力づける内容。150〜220文字程度）。
+2. overallMannerAdvice: 話し方の総括アドバイス（全問を通した声のトーン、話すテンポ、間の取り方、ハキハキ度、表情や姿勢のアドバイス。100〜160文字程度）。
+3. questionDetails: 各設問ごとの詳細アドバイスの配列（設問順）。各要素は以下のオブジェクト:
+   - questionId: 設問ID（例: q.id）
+   - deepAdvice: なぜそう話すと良いのか、面接官の視点を踏まえた詳しい深掘り解説（100〜160文字程度）。
+   - concreteExample: 「例えばこのように話すと好印象です」という小学6年生向けの具体的で分かりやすい回答例・フレーズ（100〜160文字程度）。
+
+JSONフォーマット:
+{
+  "overallReview": "...",
+  "overallMannerAdvice": "...",
+  "questionDetails": [
+    {
+      "questionId": "001",
+      "deepAdvice": "...",
+      "concreteExample": "..."
+    }
+  ]
+}`;
+
+    const payload = JSON.stringify({
+      contents: [{ parts: [{ text: promptText }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    });
+
+    const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const req = https.request(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      },
+      timeout: 40000
+    }, (res) => {
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`Gemini API HTTP ${res.statusCode}: ${data}`));
+        }
+        try {
+          const resJson = JSON.parse(data);
+          const rawText = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!rawText) return reject(new Error('No content returned from Gemini API'));
+          resolve(JSON.parse(rawText));
+        } catch(e) {
+          reject(new Error(`Failed to parse response: ${e.message}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Gemini API request timed out'));
+    });
     req.write(payload);
     req.end();
   });
@@ -423,6 +511,47 @@ const server = http.createServer(async (req, res) => {
         res.end(resData);
       } catch (err) {
         console.error('[Gemini音声評価エラー]:', err.message || err);
+        const errData = JSON.stringify({ success: false, error: err.message || String(err) });
+        res.writeHead(500, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Length': Buffer.byteLength(errData, 'utf-8')
+        });
+        res.end(errData);
+      }
+    });
+    return;
+  }
+
+  // 4. 面接全体の詳細振り返りレポート API エンドポイント（認証必須）
+  if (req.method === 'POST' && parsedUrl.pathname === '/api/overall-feedback') {
+    const session = validateToken(req.headers.authorization);
+    if (!session) {
+      const errData = JSON.stringify({ success: false, error: '認証が必要です。ログインしてください。' });
+      res.writeHead(401, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(errData, 'utf-8')
+      });
+      return res.end(errData);
+    }
+    const bodyChunks = [];
+    req.on('data', chunk => bodyChunks.push(chunk));
+    req.on('end', async () => {
+      try {
+        const body = Buffer.concat(bodyChunks).toString('utf-8');
+        const payload = JSON.parse(body || '{}');
+        const sessionAnswers = payload.sessionAnswers || [];
+        console.log(`[総合レポート生成開始] 設問数: ${sessionAnswers.length}`);
+        const report = await generateOverallFeedbackWithGemini(sessionAnswers);
+        console.log('[総合レポート生成完了]');
+
+        const resData = JSON.stringify({ success: true, report });
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Length': Buffer.byteLength(resData, 'utf-8')
+        });
+        res.end(resData);
+      } catch (err) {
+        console.error('[総合レポートエラー]:', err.message || err);
         const errData = JSON.stringify({ success: false, error: err.message || String(err) });
         res.writeHead(500, {
           'Content-Type': 'application/json; charset=utf-8',

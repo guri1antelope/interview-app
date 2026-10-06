@@ -98,8 +98,9 @@
             <p class="text-[10px] sm:text-xs text-on-surface-variant">新潟市立高志中等教育学校 入試対策</p>
           </div>
         </div>
-        <div class="text-[11px] sm:text-xs text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full font-medium">
-          受検生（Aさん）専用
+        <div id="auth-status-container" class="flex items-center gap-2">
+          <span id="user-display" class="hidden text-[11px] sm:text-xs text-secondary font-bold bg-secondary-fixed/40 px-2.5 py-1 rounded-full border border-secondary/30"></span>
+          <button id="btn-auth-action" class="text-[11px] sm:text-xs px-3 py-1 rounded-full bg-primary-container text-on-primary font-bold hover:opacity-90 shadow-xs transition-all cursor-pointer">ログイン</button>
         </div>
       </div>
     </header>
@@ -111,7 +112,7 @@
             教育理念「自立と互恵」・「志の涵養」
           </span>
           <h2 class="text-xl sm:text-2xl font-bold leading-snug">
-            声に出して練習しよう！<br/>本番で落ち着いて話せる面接アプリ
+            声に出して練習しよう！<br/>本番で落ち着いて話せる面接アプリ <span class="text-xs sm:text-sm font-normal opacity-85">(Version 2.00)</span>
           </h2>
           <p class="text-xs sm:text-sm text-surface-container-high leading-relaxed">
             先生の質問を聞いてマイクに向かって話す練習ができます。<br/>
@@ -426,8 +427,42 @@
     </div>
   </div>
 
+  <!-- ==================== 5. ログインモーダル ==================== -->
+  <div id="login-modal" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-surface-container-lowest rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200 border border-surface-container relative">
+      <button type="button" id="btn-login-close" class="absolute top-4 right-4 text-outline hover:text-on-surface p-1 rounded-lg transition-colors cursor-pointer" title="閉じる">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 mx-auto rounded-2xl bg-primary-container text-on-primary flex items-center justify-center shadow-sm mb-2">
+          <span class="material-symbols-outlined text-[26px]">lock</span>
+        </div>
+        <h3 class="text-base sm:text-lg font-bold text-primary">ログイン</h3>
+        <p class="text-xs text-on-surface-variant">面接トレーニングを始めるには、ユーザー名とパスワードを入力してください。</p>
+      </div>
+
+      <form id="login-form" class="space-y-3.5 pt-1">
+        <div class="space-y-1">
+          <label for="login-username" class="text-xs font-bold text-on-surface">ユーザー名（お名前）</label>
+          <input type="text" id="login-username" required autocomplete="username" placeholder="例: 佑実" class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container focus:border-primary focus:bg-surface text-sm text-on-surface outline-none transition-all" />
+        </div>
+        <div class="space-y-1">
+          <label for="login-password" class="text-xs font-bold text-on-surface">パスワード</label>
+          <input type="password" id="login-password" required autocomplete="current-password" placeholder="パスワードを入力" class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container focus:border-primary focus:bg-surface text-sm text-on-surface outline-none transition-all" />
+        </div>
+
+        <div id="login-error-msg" class="hidden text-xs text-error font-medium bg-red-50 p-2.5 rounded-lg border border-red-200 text-red-600"></div>
+
+        <button type="submit" id="btn-login-submit" class="w-full py-3 rounded-xl bg-primary text-white font-bold hover:opacity-95 shadow-md active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5 cursor-pointer mt-2">
+          <span>ログインする</span>
+          <span class="material-symbols-outlined text-[18px]">login</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
   <!-- Scripts -->
-  <script src="questions.js?v=20261005_03"></script>
-  <script src="app.js?v=20261005_03"></script>
+  <script src="questions.js?v=20261006_v3"></script>
+  <script src="app.js?v=20261006_v3"></script>
 </body>
 </html>

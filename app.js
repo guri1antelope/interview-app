@@ -23,6 +23,18 @@ class InterviewApp {
     this.currentAudioSource = null;   // 現在再生中の AudioBufferSourceNode
     this.currentFollowUpAudioFile = null; // 現在の追加質問音声ファイルパス
 
+    // 音声録音（MediaRecorder / Web Audio）
+    this.mediaRecorder = null;
+    this.audioChunks = [];
+    this.recordedAudioBlob = null;
+    this.recordedMimeType = '';
+    this.mediaStream = null;
+    this.initialAudioBlob = null;
+
+    // 認証情報
+    this.authToken = sessionStorage.getItem("koshi_auth_token") || null;
+    this.currentUsername = sessionStorage.getItem("koshi_auth_user") || null;
+
     // タイマー関連
     this.timerInterval = null;
     this.elapsedSeconds = 0;
@@ -31,6 +43,7 @@ class InterviewApp {
     this.initElements();
     this.initSpeech();
     this.initEvents();
+    this.updateAuthUI();
 
     // 音声一覧を事前にウォームアップ
     if ('speechSynthesis' in window) {
@@ -85,6 +98,15 @@ class InterviewApp {
     this.feedbackModal = document.getElementById("feedback-modal");
     this.modalFeedbackContent = document.getElementById("modal-feedback-content");
     this.btnModalNext = document.getElementById("btn-modal-next");
+
+    // 認証関連
+    this.userDisplay = document.getElementById("user-display");
+    this.btnAuthAction = document.getElementById("btn-auth-action");
+    this.loginModal = document.getElementById("login-modal");
+    this.loginForm = document.getElementById("login-form");
+    this.loginUsername = document.getElementById("login-username");
+    this.loginPassword = document.getElementById("login-password");
+    this.loginErrorMsg = document.getElementById("login-error-msg");
   }
 
   initSpeech() {
@@ -213,6 +235,36 @@ class InterviewApp {
   }
 
   initEvents() {
+    // 認証ボタン・フォーム
+    if (this.btnAuthAction) {
+      this.btnAuthAction.addEventListener("click", () => {
+        if (this.authToken) {
+          if (confirm("ログアウトしますか？")) {
+            this.handleLogout();
+          }
+        } else {
+          this.showLoginModal();
+        }
+      });
+    }
+
+    if (this.loginForm) {
+      this.loginForm.addEventListener("submit", (e) => this.handleLogin(e));
+    }
+
+    const btnLoginClose = document.getElementById("btn-login-close");
+    if (btnLoginClose) {
+      btnLoginClose.addEventListener("click", () => this.hideLoginModal());
+    }
+
+    if (this.loginModal) {
+      this.loginModal.addEventListener("click", (e) => {
+        if (e.target === this.loginModal) {
+          this.hideLoginModal();
+        }
+      });
+    }
+
     // ホーム画面
     document.getElementById("btn-start-practice").addEventListener("click", () => {
       this.initAudioContext();
@@ -358,6 +410,110 @@ class InterviewApp {
     }
   }
 
+  // --- 音声録音（MediaRecorder）の開始 ---
+  async startRecordingAudio() {
+    this.audioChunks = [];
+    this.recordedAudioBlob = null;
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn("getUserMedia is not supported on this browser/context.");
+        return false;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      this.mediaStream = stream;
+
+      const mimeType = this.getSupportedAudioMimeType();
+      const options = mimeType ? { mimeType } : {};
+      const recorder = new MediaRecorder(stream, options);
+      this.mediaRecorder = recorder;
+      this.recordedMimeType = recorder.mimeType || mimeType || 'audio/webm';
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          this.audioChunks.push(e.data);
+        }
+      };
+
+      recorder.start(200);
+      return true;
+    } catch (err) {
+      console.warn("Failed to start MediaRecorder:", err);
+      return false;
+    }
+  }
+
+  // --- 音声録音の停止とBlob化 ---
+  stopRecordingAudio() {
+    return new Promise((resolve) => {
+      if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+        if (this.mediaStream) {
+          this.mediaStream.getTracks().forEach(t => t.stop());
+          this.mediaStream = null;
+        }
+        resolve(this.recordedAudioBlob || null);
+        return;
+      }
+
+      this.mediaRecorder.onstop = () => {
+        const mime = this.recordedMimeType || 'audio/webm';
+        const blob = new Blob(this.audioChunks, { type: mime });
+        this.recordedAudioBlob = blob;
+        if (this.mediaStream) {
+          this.mediaStream.getTracks().forEach(t => t.stop());
+          this.mediaStream = null;
+        }
+        this.mediaRecorder = null;
+        resolve(blob);
+      };
+
+      try {
+        this.mediaRecorder.stop();
+      } catch (e) {
+        console.warn("Error stopping MediaRecorder:", e);
+        if (this.mediaStream) {
+          this.mediaStream.getTracks().forEach(t => t.stop());
+          this.mediaStream = null;
+        }
+        this.mediaRecorder = null;
+        resolve(null);
+      }
+    });
+  }
+
+  getSupportedAudioMimeType() {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/aac',
+      'audio/wav'
+    ];
+    for (const t of types) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) {
+        return t;
+      }
+    }
+    return '';
+  }
+
+  blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result ? reader.result.split(',')[1] : '';
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
   setInputAcceptance(accepting) {
     this.isAcceptingInput = accepting;
     this.updateMicUI(accepting);
@@ -409,15 +565,17 @@ class InterviewApp {
         </div>
       `;
     } else {
+      const userName = this.currentUsername || "受検生";
+      const initialChar = userName.charAt(0) || "受";
       div.className = "flex items-start gap-2.5 max-w-[92%] sm:max-w-[85%]" + " ml-auto flex-row-reverse";
       div.innerHTML = `
         <div class="w-8 h-8 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-xs">
-          A
+          ${initialChar}
         </div>
         <div class="space-y-1 text-right">
           <div class="flex items-center justify-end gap-1.5">
             <span class="text-[10px] text-outline">${timeStr}</span>
-            <span class="text-[11px] font-bold text-secondary">Aさん</span>
+            <span class="text-[11px] font-bold text-secondary">${userName}さん</span>
           </div>
           <div class="p-3 sm:p-3.5 rounded-2xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm leading-relaxed text-left whitespace-pre-wrap">${text.trim()}</div>
         </div>
@@ -437,6 +595,10 @@ class InterviewApp {
 
   // --- 練習モード開始（優先度を考慮したランダム3問） ---
   async startPracticeMode(selectedQId = null) {
+    if (!this.authToken) {
+      this.showLoginModal();
+      return;
+    }
     this.currentMode = "practice";
     if (selectedQId) {
       this.questionList = INTERVIEW_QUESTIONS.filter(q => q.id === selectedQId);
@@ -458,6 +620,10 @@ class InterviewApp {
 
   // --- 本番モード開始 ---
   async startExamMode() {
+    if (!this.authToken) {
+      this.showLoginModal();
+      return;
+    }
     this.currentMode = "exam";
     const sList = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "S")]).slice(0, 3);
     const aList = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "A")]).slice(0, 2);
@@ -595,41 +761,54 @@ class InterviewApp {
         <span>この内容で回答を送信する</span>
         <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
       `;
+    } else if (state === "analyzing") {
+      this.btnSubmit.disabled = true;
+      this.btnSubmit.className = "flex-1 py-3 px-4 rounded-xl bg-surface-container-high text-on-surface-variant font-bold opacity-80 cursor-wait flex items-center justify-center gap-2 text-sm sm:text-base transition-all";
+      this.btnSubmit.innerHTML = `
+        <span class="material-symbols-outlined text-[20px] animate-spin">sync</span>
+        <span>AIが音声を直接判定中…</span>
+      `;
     }
   }
 
   // --- アクションボタンクリック処理（タップして話す / 送信の分岐） ---
-  handleActionClick() {
+  async handleActionClick() {
     this.initAudioContext();
     if (this.isSpeaking) return;
 
     if (!this.isAcceptingInput) {
-      // 1回目のタップ：マイクを起動して回答開始（※iOSのUser Gestureを満たす）
+      // 1回目のタップ：マイク録音を開始
       this.isManuallyEdited = false;
       if (this.editBadge) this.editBadge.classList.add("hidden");
+      this.resetInputArea();
+
+      await this.startRecordingAudio();
       this.setInputAcceptance(true);
       this.updateActionButton("recording");
+      if (this.candidateStatus) {
+        this.candidateStatus.innerText = "🎙 録音中… 回答をお話しください";
+      }
     } else {
-      // 2回目のタップ：回答完了・送信
-      this.handleSubmitAnswer();
+      // 2回目のタップ：回答完了・音声送信＆AI判定
+      await this.handleSubmitAnswer();
     }
   }
 
   // --- 回答完了処理 ---
-  handleSubmitAnswer() {
+  async handleSubmitAnswer() {
     this.setInputAcceptance(false);
-
-    const answerText = this.speechTranscript.value.trim();
-
-    if (answerText.length < 5) {
-      if (!confirm("回答が短いか、音声がうまく認識されていないようです。このまま進めますか？")) {
-        this.setInputAcceptance(true);
-        return;
-      }
+    this.updateActionButton("analyzing");
+    if (this.candidateStatus) {
+      this.candidateStatus.innerText = "🤖 音声を分析しています…";
     }
 
+    // 録音停止＆Blob取得
+    const audioBlob = await this.stopRecordingAudio();
+    const answerText = this.speechTranscript.value.trim();
+
     // タイムラインにAさんの発言を追加
-    this.addChatMessage("candidate", answerText || "（無回答）");
+    const displayText = answerText || "🎙（音声を録音・送信しました）";
+    this.addChatMessage("candidate", displayText);
 
     // 追加質問（深掘り）の判定
     if (!this.isFollowUp && this.currentQuestion.followUpQuestions && this.currentQuestion.followUpQuestions.length > 0) {
@@ -638,12 +817,13 @@ class InterviewApp {
         : true;
 
       if (shouldFollowUp) {
-        this.triggerFollowUp(answerText);
+        this.initialAudioBlob = audioBlob;
+        this.triggerFollowUp(answerText || "（音声回答）");
         return;
       }
     }
 
-    this.finishCurrentQuestion(answerText);
+    await this.finishCurrentQuestion(answerText, audioBlob);
   }
 
   // --- 追加質問の発動（※録音音声の再生） ---
@@ -686,12 +866,24 @@ class InterviewApp {
     }, 500);
   }
 
-  finishCurrentQuestion(finalAnswer) {
+  async finishCurrentQuestion(finalAnswer, currentBlob = null) {
     this.stopTimer();
 
     const initialAns = this.isFollowUp ? this.initialAnswer : finalAnswer;
     const followUpAns = this.isFollowUp ? finalAnswer : "";
-    const feedback = this.evaluateAnswer(this.currentQuestion, initialAns, followUpAns);
+    const targetAudioBlob = currentBlob || this.recordedAudioBlob || this.initialAudioBlob;
+
+    if (this.candidateStatus) {
+      this.candidateStatus.innerText = "🤖 AIが面接内容と音声を総合判定しています…";
+    }
+
+    const feedback = await this.evaluateAnswerWithGemini(
+      this.currentQuestion,
+      targetAudioBlob,
+      this.speechTranscript.value.trim(),
+      initialAns,
+      followUpAns
+    );
 
     this.sessionAnswers.push({
       question: this.currentQuestion,
@@ -714,12 +906,18 @@ class InterviewApp {
       <div class="space-y-3">
         <div class="p-3.5 rounded-xl bg-secondary-fixed/40 border border-secondary/30">
           <h4 class="font-bold text-secondary text-xs sm:text-sm mb-0.5">良かった点</h4>
-          <p class="text-xs sm:text-sm text-on-surface">${feedback.goodPoint}</p>
+          <p class="text-xs sm:text-sm text-on-surface leading-relaxed">${feedback.goodPoint}</p>
         </div>
         <div class="p-3.5 rounded-xl bg-tertiary-container/20 border border-tertiary/30">
           <h4 class="font-bold text-tertiary text-xs sm:text-sm mb-0.5">もっと良くなるアドバイス</h4>
-          <p class="text-xs sm:text-sm text-on-surface">${feedback.advice}</p>
+          <p class="text-xs sm:text-sm text-on-surface leading-relaxed">${feedback.advice}</p>
         </div>
+        ${feedback.mannerFeedback ? `
+        <div class="p-3.5 rounded-xl bg-primary-fixed/20 border border-primary/20">
+          <h4 class="font-bold text-primary text-xs sm:text-sm mb-0.5">話し方のポイント（音声分析）</h4>
+          <p class="text-xs sm:text-sm text-on-surface leading-relaxed">${feedback.mannerFeedback}</p>
+        </div>
+        ` : ""}
         <div class="grid grid-cols-3 gap-2 text-center text-caption pt-1">
           <div class="p-2 rounded-lg bg-surface-container">
             <p class="text-outline text-[10px]">結論ファースト</p>
@@ -727,7 +925,7 @@ class InterviewApp {
           </div>
           <div class="p-2 rounded-lg bg-surface-container">
             <p class="text-outline text-[10px]">キーワード</p>
-            <p class="font-bold text-secondary text-xs sm:text-sm">${feedback.matchedKeywords.length > 0 ? "⭕バッチリ" : "🔺もう少し"}</p>
+            <p class="font-bold text-secondary text-xs sm:text-sm">${feedback.matchedKeywords && feedback.matchedKeywords.length > 0 ? "⭕バッチリ" : "🔺もう少し"}</p>
           </div>
           <div class="p-2 rounded-lg bg-surface-container">
             <p class="text-outline text-[10px]">ボリューム</p>
@@ -758,8 +956,68 @@ class InterviewApp {
     }
   }
 
-  // --- 評価ロジック ---
-  evaluateAnswer(q, answer, followUpAnswer) {
+  // --- Gemini API による音声・文脈の直接評価 ---
+  async evaluateAnswerWithGemini(q, audioBlob, userText, initialAns, followUpAns) {
+    try {
+      let audioBase64 = null;
+      let mimeType = null;
+      if (audioBlob && audioBlob.size > 0) {
+        audioBase64 = await this.blobToBase64(audioBlob);
+        mimeType = audioBlob.type || 'audio/webm';
+      }
+
+      const combinedText = [initialAns, followUpAns, userText].filter(Boolean).join(" ");
+
+      const response = await fetch('/api/evaluate-audio', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.authToken || ''}`
+        },
+        body: JSON.stringify({
+          audio: audioBase64,
+          mimeType: mimeType,
+          question: q,
+          userText: combinedText
+        })
+      });
+
+      if (response.status === 401) {
+        alert("ログインが必要です。もう一度ログインしてください。");
+        this.handleLogout();
+        this.showLoginModal();
+        return this.evaluateAnswerLocal(q, initialAns, followUpAns || userText);
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.success && data.evaluation) {
+        const ev = data.evaluation;
+        return {
+          isConclusionFirst: ev.isConclusionFirst,
+          matchedKeywords: ev.matchedKeywords || [],
+          volumeCheck: ev.volumeEvaluation || "ちょうど良い",
+          goodPoint: ev.goodPoint || "落ち着いて自分の言葉で回答できました。",
+          advice: ev.advice || "この調子で練習を続けましょう！",
+          mannerFeedback: ev.mannerFeedback || "",
+          charCount: ev.transcript ? ev.transcript.length : combinedText.length,
+          transcript: ev.transcript || combinedText
+        };
+      } else {
+        throw new Error(data.error || "Evaluation failed");
+      }
+    } catch (err) {
+      console.warn("Gemini evaluation fallback to local rules:", err);
+      // ネットワークやAPI障害時はローカルのルールベース評価でフォールバック
+      return this.evaluateAnswerLocal(q, initialAns, followUpAns || userText);
+    }
+  }
+
+  // --- ローカル・ルールベース評価（フォールバック用） ---
+  evaluateAnswerLocal(q, answer, followUpAnswer) {
     const text = (answer + " " + followUpAnswer).trim();
     const length = text.length;
 
@@ -769,7 +1027,7 @@ class InterviewApp {
     const isConclusionFirst = conclusionPatterns.some(p => p.test(startChunk));
 
     // 2. キーワードマッチング
-    const matchedKeywords = q.keywords.filter(kw => text.includes(kw));
+    const matchedKeywords = (q.keywords || []).filter(kw => text.includes(kw));
 
     // 3. ボリューム判定
     let volumeCheck = "ちょうど良い";
@@ -788,7 +1046,7 @@ class InterviewApp {
     if (!isConclusionFirst) {
       advice += "「〜だからです」「私の考えは〜です」と、まず最初に一番言いたい結論を言うとグッと引き締まります。";
     } else if (matchedKeywords.length === 0) {
-      advice += `具体例として、${q.intent.slice(0, 30)}…といった工夫や経験を添えるとさらに説得力が増しますよ。`;
+      advice += `具体例として、${(q.intent || "").slice(0, 30)}…といった工夫や経験を添えるとさらに説得力が増しますよ。`;
     } else {
       advice += "この調子です！本番でも目を見てハキハキと、笑顔で伝えてみてください。";
     }
@@ -799,6 +1057,7 @@ class InterviewApp {
       volumeCheck,
       goodPoint,
       advice,
+      mannerFeedback: "",
       charCount: length
     };
   }
@@ -903,6 +1162,15 @@ class InterviewApp {
             <p class="leading-relaxed">${item.feedback.advice}</p>
           </div>
         </div>
+
+        ${item.feedback.mannerFeedback ? `
+        <div class="p-3 bg-primary-fixed/20 rounded-xl text-on-primary-fixed-variant border border-primary/20 text-xs">
+          <p class="font-bold mb-0.5 flex items-center gap-1">
+            <span class="text-primary font-bold">🎙</span> 話し方のポイント（音声分析）
+          </p>
+          <p class="leading-relaxed text-on-surface">${item.feedback.mannerFeedback}</p>
+        </div>
+        ` : ""}
       </div>
     `).join("");
   }
@@ -1237,6 +1505,122 @@ class InterviewApp {
     const min = String(Math.floor(this.elapsedSeconds / 60)).padStart(2, "0");
     const sec = String(this.elapsedSeconds % 60).padStart(2, "0");
     this.timerDisplay.innerText = `${min}:${sec}`;
+  }
+
+  // --- 認証関連処理 ---
+  updateAuthUI() {
+    if (this.authToken && this.currentUsername) {
+      if (this.userDisplay) {
+        this.userDisplay.innerText = `${this.currentUsername}さん`;
+        this.userDisplay.classList.remove("hidden");
+      }
+      if (this.btnAuthAction) {
+        this.btnAuthAction.innerText = "ログアウト";
+        this.btnAuthAction.className = "text-[11px] sm:text-xs px-3 py-1 rounded-full bg-surface-container text-error font-bold hover:bg-error-container hover:text-on-error-container shadow-xs transition-all cursor-pointer border border-error/30";
+      }
+    } else {
+      if (this.userDisplay) {
+        this.userDisplay.innerText = "";
+        this.userDisplay.classList.add("hidden");
+      }
+      if (this.btnAuthAction) {
+        this.btnAuthAction.innerText = "ログイン";
+        this.btnAuthAction.className = "text-[11px] sm:text-xs px-3 py-1 rounded-full bg-primary-container text-on-primary font-bold hover:opacity-90 shadow-xs transition-all cursor-pointer";
+      }
+    }
+  }
+
+  showLoginModal() {
+    if (!this.loginModal) return;
+    if (this.loginPassword) this.loginPassword.value = "";
+    if (this.loginErrorMsg) {
+      this.loginErrorMsg.innerText = "";
+      this.loginErrorMsg.classList.add("hidden");
+    }
+    this.loginModal.classList.remove("hidden");
+    setTimeout(() => {
+      if (this.loginUsername && !this.loginUsername.value) {
+        this.loginUsername.focus();
+      } else if (this.loginPassword) {
+        this.loginPassword.focus();
+      }
+    }, 100);
+  }
+
+  hideLoginModal() {
+    if (!this.loginModal) return;
+    this.loginModal.classList.add("hidden");
+    if (this.loginErrorMsg) {
+      this.loginErrorMsg.innerText = "";
+      this.loginErrorMsg.classList.add("hidden");
+    }
+  }
+
+  async handleLogin(e) {
+    if (e) e.preventDefault();
+    const username = this.loginUsername?.value.trim();
+    const password = this.loginPassword?.value;
+    if (!username || !password) {
+      if (this.loginErrorMsg) {
+        this.loginErrorMsg.innerText = "ユーザー名とパスワードを入力してください。";
+        this.loginErrorMsg.classList.remove("hidden");
+      }
+      return;
+    }
+
+    const submitBtn = document.getElementById("btn-login-submit");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.classList.add("opacity-60");
+    }
+
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "ユーザー名またはパスワードが正しくありません。");
+      }
+
+      this.authToken = data.token;
+      this.currentUsername = data.username;
+      sessionStorage.setItem("koshi_auth_token", data.token);
+      sessionStorage.setItem("koshi_auth_user", data.username);
+
+      this.updateAuthUI();
+      this.hideLoginModal();
+    } catch (err) {
+      if (this.loginErrorMsg) {
+        this.loginErrorMsg.innerText = err.message || "ログインに失敗しました。";
+        this.loginErrorMsg.classList.remove("hidden");
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove("opacity-60");
+      }
+    }
+  }
+
+  handleLogout() {
+    this.authToken = null;
+    this.currentUsername = null;
+    sessionStorage.removeItem("koshi_auth_token");
+    sessionStorage.removeItem("koshi_auth_user");
+    this.updateAuthUI();
+
+    // 面接中の場合はホーム画面に戻す
+    if (this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
+      this.stopAllAudio();
+      this.stopTimer();
+      this.setInputAcceptance(false);
+      this.viewInterview.classList.add("hidden");
+      if (this.viewResult) this.viewResult.classList.add("hidden");
+      if (this.viewHome) this.viewHome.classList.remove("hidden");
+    }
   }
 }
 

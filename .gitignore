@@ -1,0 +1,15 @@
+# 環境変数・APIキー
+.env
+.env.*
+!.env.example
+
+# キャッシュ・依存関係
+audio_cache/
+node_modules/
+.DS_Store
+Thumbs.db
+
+# ローカル作業用
+voicemake.py
+*.txt
+

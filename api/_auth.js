@@ -14,7 +14,7 @@ function unbase64url(str) {
 }
 
 function getRegisteredUsers() {
-  const defaultUsers = 'yumi:6AG6H7ZiChqB,mai:HNx5h6EXcqTw,aki:CUhasAa9JM3U,佑実:6AG6H7ZiChqB,真衣:HNx5h6EXcqTw';
+  const defaultUsers = 'taro:pass1234';
   const envUsers = process.env.AUTH_USERS || defaultUsers;
   const users = {};
   envUsers.split(',').forEach(pair => {

@@ -121,48 +121,73 @@
         </div>
       </div>
 
-      <!-- Mode Select Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-        <!-- 練習モード -->
+      <!-- Mode Select Cards (3モード選択) -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <!-- 1. 練習モード -->
         <div class="bg-surface-container-lowest rounded-2xl p-5 sm:p-6 shadow-sm border-2 border-secondary/30 flex flex-col justify-between hover:border-secondary transition-all">
           <div class="space-y-2.5">
             <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center">
               <span class="material-symbols-outlined text-[24px] sm:text-[28px]">lightbulb</span>
             </div>
-            <h3 class="text-lg sm:text-xl font-bold text-primary">練習モード（ランダム3問）</h3>
-            <p class="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
-              重要質問からバランスよく3問をランダム出題。1問ずつヒントを見ながら話せて、その場ですぐにアドバイスをもらえます。
+            <h3 class="text-base sm:text-lg font-bold text-primary">① 練習モード（ランダム3問）</h3>
+            <p class="text-xs text-on-surface-variant leading-relaxed">
+              重要質問からバランスよく3問を出題。ヒントを見ながら話せて、文字入力・修正も可能です。
             </p>
-            <ul class="text-[11px] sm:text-xs text-on-surface space-y-1 pt-1">
-              <li class="flex items-center gap-1.5"><span class="text-secondary font-bold">✔</span> 優先度S・A・B/Cから各1問をバランス出題</li>
-              <li class="flex items-center gap-1.5"><span class="text-secondary font-bold">✔</span> 回答直後にワンポイントアドバイスを表示</li>
-              <li class="flex items-center gap-1.5"><span class="text-secondary font-bold">✔</span> 1回5分程度でテンポよく何度でも挑戦可能</li>
+            <ul class="text-[11px] text-on-surface space-y-1 pt-1">
+              <li class="flex items-center gap-1.5"><span class="text-secondary font-bold">✔</span> キーボード文字入力・手動編集OK</li>
+              <li class="flex items-center gap-1.5"><span class="text-secondary font-bold">✔</span> 回答直後にワンポイントアドバイス</li>
+              <li class="flex items-center gap-1.5"><span class="text-secondary font-bold">✔</span> 1回5分程度で気軽に何度でも挑戦可能</li>
             </ul>
           </div>
-          <button id="btn-start-practice" class="mt-5 w-full py-3 sm:py-3.5 rounded-xl bg-secondary text-on-secondary font-bold hover:bg-opacity-95 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base">
+          <button id="btn-start-practice" class="mt-5 w-full py-3 rounded-xl bg-secondary text-on-secondary font-bold hover:bg-opacity-95 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm">
             <span>練習モードを始める</span>
             <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
           </button>
         </div>
 
-        <!-- 本番モード -->
+        <!-- 2. 本番モード -->
         <div class="bg-surface-container-lowest rounded-2xl p-5 sm:p-6 shadow-sm border-2 border-primary/20 flex flex-col justify-between hover:border-primary transition-all">
           <div class="space-y-2.5">
             <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary-container text-on-primary flex items-center justify-center">
               <span class="material-symbols-outlined text-[24px] sm:text-[28px]">school</span>
             </div>
-            <h3 class="text-lg sm:text-xl font-bold text-primary">本番モード（通し面接）</h3>
-            <p class="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
-              本番と同じように5〜6問を通しで行います。深掘り質問にも答え、最後に全体の総合結果が出ます。
+            <h3 class="text-base sm:text-lg font-bold text-primary">② 本番モード（通し面接）</h3>
+            <p class="text-xs text-on-surface-variant leading-relaxed">
+              本番同様に5〜6問を通しで行います。文字修正も可能で、最後に総合結果レポートが出ます。
             </p>
-            <ul class="text-[11px] sm:text-xs text-on-surface space-y-1 pt-1">
+            <ul class="text-[11px] text-on-surface space-y-1 pt-1">
               <li class="flex items-center gap-1.5"><span class="text-primary font-bold">✔</span> 本番同様の通し面接（10〜15分想定）</li>
-              <li class="flex items-center gap-1.5"><span class="text-primary font-bold">✔</span> 予想外の追加質問にも落ち着いて対応</li>
-              <li class="flex items-center gap-1.5"><span class="text-primary font-bold">✔</span> 最後にLINE風のトーク履歴付きで総合評価</li>
+              <li class="flex items-center gap-1.5"><span class="text-primary font-bold">✔</span> キーボード文字入力・手動編集OK</li>
+              <li class="flex items-center gap-1.5"><span class="text-primary font-bold">✔</span> 最後にトーク履歴付きで詳細総合評価</li>
             </ul>
           </div>
-          <button id="btn-start-exam" class="mt-5 w-full py-3 sm:py-3.5 rounded-xl bg-primary-container text-on-primary font-bold hover:bg-opacity-95 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base">
+          <button id="btn-start-exam" class="mt-5 w-full py-3 rounded-xl bg-primary-container text-on-primary font-bold hover:bg-opacity-95 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm">
             <span>本番モードに挑戦する</span>
+            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+          </button>
+        </div>
+
+        <!-- 3. AI実践モード（音声専任・新設コンテンツ） -->
+        <div class="bg-surface-container-lowest rounded-2xl p-5 sm:p-6 shadow-sm border-2 border-tertiary/40 flex flex-col justify-between hover:border-tertiary transition-all relative overflow-hidden">
+          <div class="absolute top-3 right-3 bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold px-2 py-0.5 rounded-full">
+            新コンテンツ
+          </div>
+          <div class="space-y-2.5">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center">
+              <span class="material-symbols-outlined text-[24px] sm:text-[28px]">mic</span>
+            </div>
+            <h3 class="text-base sm:text-lg font-bold text-primary">③ AI実践モード（音声のみ）</h3>
+            <p class="text-xs text-on-surface-variant leading-relaxed">
+              文字入力なし・音声発話だけで回答する実戦練習。あなたの回答を聞いてAIがその場で追加質問を考えます。
+            </p>
+            <ul class="text-[11px] text-on-surface space-y-1 pt-1">
+              <li class="flex items-center gap-1.5"><span class="text-tertiary font-bold">✔</span> キーボード入力なし・発話のみで本番直前練習</li>
+              <li class="flex items-center gap-1.5"><span class="text-tertiary font-bold">✔</span> あなたの回答内容に応じたリアルタイム深掘り質問</li>
+              <li class="flex items-center gap-1.5"><span class="text-tertiary font-bold">✔</span> 本質問と同一音声（Kore）による自然な対話</li>
+            </ul>
+          </div>
+          <button id="btn-start-ai-voice" class="mt-5 w-full py-3 rounded-xl bg-gradient-to-r from-tertiary to-secondary text-on-primary font-bold hover:opacity-95 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm">
+            <span>AI実践モードを始める</span>
             <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
           </button>
         </div>
@@ -284,12 +309,26 @@
               </div>
             </div>
 
-            <!-- 入力テキストエリア（直接キーボード入力可能） -->
-            <div class="relative">
+            <!-- 従来モード用：入力テキストエリア（直接キーボード入力・修正可能） -->
+            <div id="text-input-container" class="relative">
               <textarea id="speech-transcript" class="w-full bg-surface-container-low border border-surface-variant/70 focus:border-primary/50 focus:bg-white focus:ring-2 focus:ring-primary/20 rounded-xl p-3 text-sm sm:text-base text-on-surface leading-relaxed resize-y outline-none min-h-[90px] sm:min-h-[110px]" placeholder="マイクに向かって話すか、直接文字を入力・修正できます…"></textarea>
               <div class="absolute bottom-2.5 right-3 flex items-center gap-2 pointer-events-none">
                 <span id="edit-badge" class="hidden px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold">手動編集中</span>
                 <span id="char-count" class="text-[11px] text-outline font-semibold">0 文字</span>
+              </div>
+            </div>
+
+            <!-- AI実践モード用：音声回答表示エリア（音声入力専用・手動テキスト入力なし） -->
+            <div id="voice-answer-container" class="hidden relative bg-surface-container-low border border-surface-variant/70 rounded-xl p-3.5 sm:p-4 min-h-[90px] sm:min-h-[110px] flex flex-col justify-between transition-all">
+              <div id="voice-transcript-display" class="text-sm sm:text-base text-on-surface leading-relaxed min-h-[48px] select-none break-words">
+                <span class="text-on-surface-variant/60 italic text-xs sm:text-sm">マイクに向かって回答をお話しください…</span>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-surface-container/60 mt-2">
+                <div class="flex items-center gap-1.5">
+                  <span id="voice-indicator-dot" class="w-2 h-2 rounded-full bg-outline"></span>
+                  <span id="voice-guide-text" class="text-[11px] text-on-surface-variant font-medium">マイクボタンを押して話し始めてください</span>
+                </div>
+                <span id="voice-char-count" class="text-[11px] text-outline font-semibold">0 文字</span>
               </div>
             </div>
 
@@ -299,7 +338,7 @@
                 <span class="material-symbols-outlined text-[22px] sm:text-[24px]">mic</span>
               </button>
               <button id="btn-submit" class="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-primary-container to-secondary text-on-primary font-bold hover:opacity-95 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base">
-                <span>この内容で回答を送信する</span>
+                <span>話し終わりました（回答完了）</span>
                 <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
               </button>
             </div>

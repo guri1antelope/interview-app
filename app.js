@@ -16,12 +16,15 @@ class InterviewApp {
     this.isAcceptingInput = false;    // Aさんの発話受付中フラグ
     this.isSpeaking = false;          // 先生の発話中フラグ
     this.ignoredPrefixLength = 0;     // 先生の発話中に拾った文字数（除外用）
-    this.isManuallyEdited = false;    // 手動編集中フラグ
+    this.isManuallyEdited = false;    // 手動編集フラグ（音声専用化に伴い無効化）
+    this.currentSpeechText = "";      // 音声認識で取得した回答テキスト
     this.currentAudio = null;         // 録音音声再生用フォールバックインスタンス
     this.audioCtx = null;             // Web Audio API AudioContext
     this.audioBufferCache = new Map();// デコード済み音声バッファキャッシュ
     this.currentAudioSource = null;   // 現在再生中の AudioBufferSourceNode
-    this.currentFollowUpAudioFile = null; // 現在の追加質問音声ファイルパス
+    this.currentFollowUpAudioFile = null; // 現在の追加質問音声ファイルパス（固定フォールバック用）
+    this.currentFollowUpAudioBase64 = null; // 動的生成された追加質問音声Base64 (Gemini TTS Kore)
+    this.currentFollowUpAudioMime = "audio/wav";
 
     // 音声録音（MediaRecorder / Web Audio）
     this.mediaRecorder = null;
@@ -77,11 +80,18 @@ class InterviewApp {
     // 回答者エリア
     this.candidateStatus = document.getElementById("candidate-status");
     this.voiceVisualizer = document.getElementById("voice-visualizer");
-    this.speechTranscript = document.getElementById("speech-transcript");
+    this.textInputContainer = document.getElementById("text-input-container");
+    this.voiceAnswerContainer = document.getElementById("voice-answer-container");
+    this.speechTranscript = document.getElementById("speech-transcript"); // 従来用textarea
+    this.voiceTranscriptDisplay = document.getElementById("voice-transcript-display"); // 音声専用display
     this.charCount = document.getElementById("char-count");
+    this.voiceCharCount = document.getElementById("voice-char-count");
     this.editBadge = document.getElementById("edit-badge");
+    this.voiceIndicatorDot = document.getElementById("voice-indicator-dot");
+    this.voiceGuideText = document.getElementById("voice-guide-text");
     this.btnMic = document.getElementById("btn-mic");
     this.btnSubmit = document.getElementById("btn-submit");
+    this.btnStartAiVoice = document.getElementById("btn-start-ai-voice");
     
     // 右サイドバー（練習モードヒント）
     this.practiceSidebar = document.getElementById("practice-sidebar");
@@ -190,19 +200,42 @@ class InterviewApp {
         return;
       }
 
-      // 手動編集された後は、音声認識による自動上書きを行わない
-      if (this.isManuallyEdited) {
-        return;
-      }
-
       // 今回のターンの発話テキストを抽出
       let turnText = "";
       for (let i = 0; i < event.results.length; ++i) {
         turnText += event.results[i][0].transcript;
       }
 
-      this.speechTranscript.value = turnText;
-      this.charCount.innerText = `${turnText.length} 文字`;
+      this.currentSpeechText = turnText;
+
+      if (this.currentMode === "ai-voice") {
+        // AI実践モード：音声専用ディスプレイに反映
+        if (this.voiceTranscriptDisplay) {
+          if (turnText) {
+            this.voiceTranscriptDisplay.innerHTML = `<span class="text-on-surface">${turnText}</span>`;
+          } else {
+            this.voiceTranscriptDisplay.innerHTML = `<span class="text-on-surface-variant/60 italic text-xs sm:text-sm">マイクに向かって回答をお話しください…</span>`;
+          }
+        }
+        if (this.voiceCharCount) {
+          this.voiceCharCount.innerText = `${turnText.length} 文字`;
+        }
+        if (this.voiceGuideText) {
+          this.voiceGuideText.innerText = "音声を認識中… 話し終えたら完了ボタンを押してください";
+        }
+        if (this.voiceIndicatorDot) {
+          this.voiceIndicatorDot.className = "w-2 h-2 rounded-full bg-secondary animate-ping";
+        }
+      } else {
+        // 従来モード（練習・本番）：手動編集されていない場合のみテキストエリアに自動反映
+        if (!this.isManuallyEdited && this.speechTranscript) {
+          this.speechTranscript.value = turnText;
+        }
+        if (this.charCount) {
+          const len = this.speechTranscript ? this.speechTranscript.value.length : turnText.length;
+          this.charCount.innerText = `${len} 文字`;
+        }
+      }
     };
 
     rec.onerror = (event) => {
@@ -274,12 +307,32 @@ class InterviewApp {
       this.initAudioContext();
       this.startExamMode();
     });
+    if (this.btnStartAiVoice) {
+      this.btnStartAiVoice.addEventListener("click", () => {
+        this.initAudioContext();
+        this.startAiVoiceMode();
+      });
+    }
     
     // 再生ボタン
     this.btnReplay.addEventListener("click", () => {
       this.initAudioContext();
       if (this.isFollowUp) {
-        if (this.currentFollowUpAudioFile) {
+        if (this.currentFollowUpAudioBase64) {
+          this.setInputAcceptance(false);
+          this.updateActionButton("speaking");
+          this.interviewerStatus.innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+            <span>追加質問を読み上げています…</span>
+          `;
+          this.playBase64Audio(this.currentFollowUpAudioBase64, this.currentFollowUpAudioMime, () => {
+            this.interviewerStatus.innerHTML = `
+              <span class="w-2 h-2 rounded-full bg-secondary"></span>
+              <span>追加質問に答えてみましょう。</span>
+            `;
+            this.startAnsweringTurn();
+          });
+        } else if (this.currentFollowUpAudioFile) {
           this.setInputAcceptance(false);
           this.updateActionButton("speaking");
           this.interviewerStatus.innerHTML = `
@@ -321,8 +374,6 @@ class InterviewApp {
         this.setInputAcceptance(false);
         this.updateActionButton("ready");
       } else {
-        this.isManuallyEdited = false;
-        if (this.editBadge) this.editBadge.classList.add("hidden");
         this.setInputAcceptance(true);
         this.updateActionButton("recording");
       }
@@ -331,12 +382,16 @@ class InterviewApp {
     // 回答アクションボタン（1回目: タップして話す / 2回目: 送信）
     this.btnSubmit.addEventListener("click", () => this.handleActionClick());
 
-    // テキストエリア直接入力イベント（手動編集の検知）
-    this.speechTranscript.addEventListener("input", () => {
-      this.isManuallyEdited = true;
-      if (this.editBadge) this.editBadge.classList.remove("hidden");
-      this.charCount.innerText = `${this.speechTranscript.value.length} 文字`;
-    });
+    // 従来モード用：テキストエリア直接入力イベント（手動編集の検知）
+    if (this.speechTranscript) {
+      this.speechTranscript.addEventListener("input", () => {
+        if (this.currentMode !== "ai-voice") {
+          this.isManuallyEdited = true;
+          if (this.editBadge) this.editBadge.classList.remove("hidden");
+          if (this.charCount) this.charCount.innerText = `${this.speechTranscript.value.length} 文字`;
+        }
+      });
+    }
 
     // レスキューボタン
     this.btnRescueRepeat.addEventListener("click", () => this.handleRescue("repeat"));
@@ -639,6 +694,27 @@ class InterviewApp {
     this.loadQuestion();
   }
 
+  // --- AI実践モード開始（音声専任・動的追加質問、全3問） ---
+  async startAiVoiceMode() {
+    if (!this.authToken) {
+      this.showLoginModal();
+      return;
+    }
+    this.currentMode = "ai-voice";
+    const s = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "S")])[0];
+    const a = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "A")])[0];
+    const bc = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "B" || q.priority === "C")])[0];
+    this.questionList = [s, a, bc];
+
+    this.currentQuestionIndex = 0;
+    this.sessionAnswers = [];
+    if (this.chatTimeline) this.chatTimeline.innerHTML = "";
+    this.addSystemDivider("AI実践モードを開始しました（音声専任・全3問）");
+    this.setupInterviewScreen();
+    await this.getVoicesAsync();
+    this.loadQuestion();
+  }
+
   shuffle(array) {
     return array.sort(() => Math.random() - 0.5);
   }
@@ -648,15 +724,28 @@ class InterviewApp {
     if (this.currentMode === "practice") {
       this.modeBadge.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-secondary animate-pulse flex-shrink-0"></span>
-        <span class="truncate">練習モード</span>
+        <span class="truncate">① 練習モード</span>
       `;
       this.practiceSidebar.classList.remove("hidden");
-    } else {
+      if (this.textInputContainer) this.textInputContainer.classList.remove("hidden");
+      if (this.voiceAnswerContainer) this.voiceAnswerContainer.classList.add("hidden");
+    } else if (this.currentMode === "exam") {
       this.modeBadge.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-primary animate-pulse flex-shrink-0"></span>
-        <span class="font-bold text-primary truncate">本番モード</span>
+        <span class="font-bold text-primary truncate">② 本番モード</span>
       `;
       this.practiceSidebar.classList.add("hidden");
+      if (this.textInputContainer) this.textInputContainer.classList.remove("hidden");
+      if (this.voiceAnswerContainer) this.voiceAnswerContainer.classList.add("hidden");
+    } else {
+      // ai-voice
+      this.modeBadge.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-tertiary animate-pulse flex-shrink-0"></span>
+        <span class="font-bold text-tertiary truncate">③ AI実践モード（音声）</span>
+      `;
+      this.practiceSidebar.classList.add("hidden");
+      if (this.textInputContainer) this.textInputContainer.classList.add("hidden");
+      if (this.voiceAnswerContainer) this.voiceAnswerContainer.classList.remove("hidden");
     }
   }
 
@@ -713,9 +802,22 @@ class InterviewApp {
 
   resetInputArea() {
     this.isManuallyEdited = false;
+    this.currentSpeechText = "";
     if (this.editBadge) this.editBadge.classList.add("hidden");
-    if (this.speechTranscript) this.speechTranscript.value = "";
+    
+    // 従来用textarea
+    if (this.speechTranscript) {
+      this.speechTranscript.value = "";
+    }
     if (this.charCount) this.charCount.innerText = "0 文字";
+
+    // 音声専用display
+    if (this.voiceTranscriptDisplay) {
+      this.voiceTranscriptDisplay.innerHTML = `<span class="text-on-surface-variant/60 italic text-xs sm:text-sm">マイクに向かって回答をお話しください…</span>`;
+    }
+    if (this.voiceCharCount) this.voiceCharCount.innerText = "0 文字";
+    if (this.voiceGuideText) this.voiceGuideText.innerText = "マイクボタンを押して話し始めてください";
+    if (this.voiceIndicatorDot) this.voiceIndicatorDot.className = "w-2 h-2 rounded-full bg-outline";
   }
 
   startAnsweringTurn() {
@@ -757,8 +859,9 @@ class InterviewApp {
     } else if (state === "recording") {
       this.btnSubmit.disabled = false;
       this.btnSubmit.className = "flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-primary-container to-secondary text-on-primary font-bold hover:opacity-95 shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base transition-all cursor-pointer";
+      const submitText = (this.currentMode === "ai-voice") ? "話し終わりました（回答完了）" : "この内容で回答を送信する";
       this.btnSubmit.innerHTML = `
-        <span>この内容で回答を送信する</span>
+        <span>${submitText}</span>
         <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
       `;
     } else if (state === "analyzing") {
@@ -804,9 +907,11 @@ class InterviewApp {
 
     // 録音停止＆Blob取得
     const audioBlob = await this.stopRecordingAudio();
-    const answerText = this.speechTranscript.value.trim();
+    const answerText = (this.currentMode === "ai-voice")
+      ? this.currentSpeechText.trim()
+      : (this.speechTranscript ? this.speechTranscript.value.trim() : this.currentSpeechText.trim());
 
-    // タイムラインにAさんの発言を追加
+    // タイムラインに受検者の発言を追加
     const displayText = answerText || "🎙（音声を録音・送信しました）";
     this.addChatMessage("candidate", displayText);
 
@@ -818,7 +923,13 @@ class InterviewApp {
 
       if (shouldFollowUp) {
         this.initialAudioBlob = audioBlob;
-        this.triggerFollowUp(answerText || "（音声回答）");
+        if (this.currentMode === "ai-voice") {
+          // AI実践モード：Geminiによる動的質問生成＆Kore音声再生
+          await this.triggerDynamicFollowUp(answerText || "（音声回答）", audioBlob);
+        } else {
+          // 従来モード（練習・本番）：固定追加質問＆事前生成WAV再生
+          this.triggerStaticFollowUp(answerText || "（音声回答）");
+        }
         return;
       }
     }
@@ -826,14 +937,15 @@ class InterviewApp {
     await this.finishCurrentQuestion(answerText, audioBlob);
   }
 
-  // --- 追加質問の発動（※録音音声の再生） ---
-  triggerFollowUp(initialAnswer) {
+  // --- 従来モード用：固定追加質問の発動（※事前生成WAV音声の再生） ---
+  triggerStaticFollowUp(initialAnswer) {
     this.isFollowUp = true;
     this.initialAnswer = initialAnswer;
-    
-    const followUps = this.currentQuestion.followUpQuestions;
+    this.currentFollowUpAudioBase64 = null;
+
+    const followUps = this.currentQuestion.followUpQuestions || [];
     const randomIndex = Math.floor(Math.random() * followUps.length);
-    this.currentFollowUpQuestion = followUps[randomIndex];
+    this.currentFollowUpQuestion = followUps[randomIndex] || "具体的に教えてください。";
 
     const addNumStr = String(randomIndex + 1).padStart(2, "0");
     this.currentFollowUpAudioFile = `VOICE/${this.currentQuestion.id}_add${addNumStr}.wav`;
@@ -846,16 +958,13 @@ class InterviewApp {
       <span>回答を確認しています…</span>
     `;
 
-    // iOSマイク回路の完全解放（約500ms）を待ってから追加質問を開始
     setTimeout(() => {
-      // タイムラインに追加質問をメッセージとして追加
       this.addChatMessage("interviewer", this.currentFollowUpQuestion, { isFollowUp: true });
       this.interviewerStatus.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-tertiary"></span>
         <span>追加質問を読み上げています…</span>
       `;
 
-      // 音声ファイルを再生
       this.playAudioFile(this.currentFollowUpAudioFile, () => {
         this.interviewerStatus.innerHTML = `
           <span class="w-2 h-2 rounded-full bg-secondary"></span>
@@ -864,6 +973,74 @@ class InterviewApp {
         this.startAnsweringTurn();
       });
     }, 500);
+  }
+
+  // --- AI実践モード用：追加質問の発動（※Gemini動的質問生成＆Kore音声再生） ---
+  async triggerDynamicFollowUp(initialAnswer, audioBlob = null) {
+    this.isFollowUp = true;
+    this.initialAnswer = initialAnswer;
+    this.currentFollowUpAudioBase64 = null;
+    this.currentFollowUpAudioFile = null;
+
+    this.resetInputArea();
+    this.setInputAcceptance(false);
+    this.updateActionButton("speaking");
+    this.interviewerStatus.innerHTML = `
+      <span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+      <span>回答を確認し、次の質問を考えています…</span>
+    `;
+
+    try {
+      let audioBase64 = null;
+      let mimeType = "audio/webm";
+      if (audioBlob && audioBlob.size > 0) {
+        mimeType = audioBlob.type || "audio/webm";
+        audioBase64 = await this.blobToBase64(audioBlob);
+      }
+
+      // 動的追加質問API呼び出し
+      const res = await this.fetchWithAuth("/api/generate-followup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: this.currentQuestion,
+          answer: initialAnswer,
+          audio: audioBase64,
+          mimeType: mimeType
+        })
+      });
+
+      const data = await res.json();
+      if (!data.success || !data.questionText) {
+        throw new Error(data.error || "動的質問の生成に失敗しました");
+      }
+
+      this.currentFollowUpQuestion = data.questionText;
+      this.currentFollowUpAudioBase64 = data.audioBase64;
+      this.currentFollowUpAudioMime = data.mimeType || "audio/wav";
+
+      this.addChatMessage("interviewer", this.currentFollowUpQuestion, { isFollowUp: true });
+      this.interviewerStatus.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+        <span>追加質問を読み上げています…</span>
+      `;
+
+      if (this.currentFollowUpAudioBase64) {
+        this.playBase64Audio(this.currentFollowUpAudioBase64, this.currentFollowUpAudioMime, () => {
+          this.interviewerStatus.innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-secondary"></span>
+            <span>追加質問に答えてみましょう。</span>
+          `;
+          this.startAnsweringTurn();
+        });
+      } else {
+        this.triggerStaticFollowUp(initialAnswer);
+      }
+
+    } catch (err) {
+      console.warn("動的追加質問APIエラー、固定質問へフォールバックします:", err);
+      this.triggerStaticFollowUp(initialAnswer);
+    }
   }
 
   async finishCurrentQuestion(finalAnswer, currentBlob = null) {
@@ -880,7 +1057,7 @@ class InterviewApp {
     const feedback = await this.evaluateAnswerWithGemini(
       this.currentQuestion,
       targetAudioBlob,
-      this.speechTranscript.value.trim(),
+      finalAnswer,
       initialAns,
       followUpAns
     );
@@ -894,7 +1071,7 @@ class InterviewApp {
       elapsedSeconds: this.elapsedSeconds
     });
 
-    if (this.currentMode === "practice") {
+    if (this.currentMode === "practice" || this.currentMode === "ai-voice") {
       this.showInstantFeedbackModal(feedback);
     } else {
       setTimeout(() => this.nextQuestion(), 500);
@@ -1458,6 +1635,95 @@ class InterviewApp {
 
     audio.play().catch(e => {
       console.warn("音声の自動再生がブロックされたかエラーです:", e);
+      finish();
+    });
+  }
+
+  // --- Base64 音声（Gemini TTS Kore 生成WAV）の再生制御 ---
+  async playBase64Audio(base64Data, mimeType = "audio/wav", onEndCallback = null) {
+    this.stopAllAudio();
+    this.stopRecognitionCompletely(); // 先生の発話中はマイクを完全に切る
+    this.isSpeaking = true;
+    this.setInputAcceptance(false);
+
+    if (navigator.audioSession) {
+      try {
+        navigator.audioSession.type = "playback";
+      } catch(e) {}
+    }
+
+    if (!base64Data) {
+      this.isSpeaking = false;
+      if (onEndCallback) onEndCallback();
+      return;
+    }
+
+    this.initAudioContext();
+
+    // 1. Web Audio API でデコードして再生
+    if (this.audioCtx) {
+      try {
+        const binaryStr = window.atob(base64Data);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        // slice(0) で安全なコピーArrayBufferを作成
+        const arrayBuffer = bytes.buffer.slice(0);
+
+        const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+        if (!this.isSpeaking) return;
+
+        const source = this.audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(this.audioCtx.destination);
+        this.currentAudioSource = source;
+
+        let hasFinished = false;
+        const finish = () => {
+          if (hasFinished) return;
+          hasFinished = true;
+          this.isSpeaking = false;
+          this.currentAudioSource = null;
+          if (onEndCallback) onEndCallback();
+        };
+
+        source.onended = finish;
+        source.start(0);
+        return;
+      } catch (err) {
+        console.warn("Base64 Web Audio API デコード失敗、フォールバック再生:", err);
+      }
+    }
+
+    // 2. フォールバック（HTMLAudioElement）
+    const audio = new Audio(`data:${mimeType};base64,${base64Data}`);
+    this.currentAudio = audio;
+
+    let hasFinished = false;
+    const finish = () => {
+      if (hasFinished) return;
+      hasFinished = true;
+      this.isSpeaking = false;
+      if (this.currentAudio) {
+        try {
+          this.currentAudio.pause();
+          this.currentAudio.src = "";
+        } catch(e) {}
+        this.currentAudio = null;
+      }
+      if (onEndCallback) onEndCallback();
+    };
+
+    audio.onended = finish;
+    audio.onerror = (e) => {
+      console.warn("Base64 音声再生エラー:", e);
+      finish();
+    };
+
+    audio.play().catch(e => {
+      console.warn("Base64 音声自動再生エラー:", e);
       finish();
     });
   }

@@ -357,6 +357,170 @@ JSONフォーマット:
   });
 }
 
+// Gemini API による動的追加質問およびGemini TTS (Kore) による音声生成
+function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mimeType) {
+  return new Promise(async (resolve, reject) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return reject(new Error('GEMINI_API_KEY is not configured'));
+
+    const qText = questionData?.question || '本校を志望した理由を教えてください。';
+    const intent = questionData?.intent || '';
+    const keywords = questionData?.keywords ? questionData.keywords.join(', ') : '';
+
+    try {
+      // 1. 追加質問テキスト生成 (Gemini 2.5 Flash)
+      const promptText = `あなたは新潟市立高志中等教育学校の入学者選抜（面接）の面接官です。
+以下の本質問に対する受験生（小学6年生）の回答を聞いて、回答内容を深掘りする自然な「追加質問」を1問だけ作成してください。
+
+【本質問】: ${qText}
+【出題意図】: ${intent}
+【重視キーワード】: ${keywords}
+【受験生の回答】: ${studentAnswer || '（音声回答）'}
+
+要件:
+1. 受験生が回答した具体的な言葉やエピソードに触れつつ、「具体的にどのような〜ですか？」「〜についてもっと詳しく教えてください」のように、思考や主体性を引き出す質問にしてください。
+2. 小学生が落ち着いて答えられるよう、丁寧で温かい面接官の口調にしてください。
+3. 質問文の長さは45〜75文字程度にしてください。
+4. 読み上げを考慮し、「高志中等」は「こうしちゅうとう」、「高志」は「こうし」とひらがなで表記してください。
+
+必ず以下のJSONフォーマットのみで出力してください:
+{
+  "followUpQuestion": "質問文"
+}`;
+
+      const textParts = [];
+      if (audioBase64) {
+        textParts.push({
+          inlineData: {
+            mimeType: (mimeType || 'audio/webm').split(';')[0],
+            data: audioBase64
+          }
+        });
+      }
+      textParts.push({ text: promptText });
+
+      const textPayload = JSON.stringify({
+        contents: [{ parts: textParts }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.7
+        }
+      });
+
+      const textTargetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const textRes = await new Promise((res, rej) => {
+        const req = https.request(textTargetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(textPayload)
+          },
+          timeout: 30000
+        }, (apiRes) => {
+          const chunks = [];
+          apiRes.on('data', c => chunks.push(c));
+          apiRes.on('end', () => {
+            const data = Buffer.concat(chunks).toString('utf-8');
+            if (apiRes.statusCode < 200 || apiRes.statusCode >= 300) {
+              return rej(new Error(`Gemini Text HTTP ${apiRes.statusCode}: ${data}`));
+            }
+            try { res(JSON.parse(data)); } catch(e) { rej(e); }
+          });
+        });
+        req.on('error', rej);
+        req.on('timeout', () => { req.destroy(); rej(new Error('Text request timed out')); });
+        req.write(textPayload);
+        req.end();
+      });
+
+      let followUpText = '';
+      const rawContent = textRes.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawContent) {
+        try {
+          const parsed = JSON.parse(rawContent);
+          followUpText = parsed.followUpQuestion || '';
+        } catch (e) {
+          followUpText = rawContent;
+        }
+      }
+
+      followUpText = followUpText.replace(/^["「]/, '').replace(/["」]$/, '').trim();
+      if (!followUpText) {
+        followUpText = "具体的に、その時どのような工夫をしましたか？";
+      }
+
+      // 2. 音声生成 (gemini-3.8-flash-tts, voice: Kore)
+      const ttsPayload = JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [{
+            text: `## Transcript:\n${followUpText}`
+          }]
+        }],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: { voice: "Kore" }
+          }
+        }
+      });
+
+      const ttsTargetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent?key=${apiKey}`;
+      let audioBase64Result = null;
+      let audioMimeType = "audio/wav";
+
+      try {
+        const ttsRes = await new Promise((res, rej) => {
+          const req = https.request(ttsTargetUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(ttsPayload)
+            },
+            timeout: 30000
+          }, (apiRes) => {
+            const chunks = [];
+            apiRes.on('data', c => chunks.push(c));
+            apiRes.on('end', () => {
+              const data = Buffer.concat(chunks).toString('utf-8');
+              if (apiRes.statusCode < 200 || apiRes.statusCode >= 300) {
+                return rej(new Error(`Gemini TTS HTTP ${apiRes.statusCode}: ${data}`));
+              }
+              try { res(JSON.parse(data)); } catch(e) { rej(e); }
+            });
+          });
+          req.on('error', rej);
+          req.on('timeout', () => { req.destroy(); rej(new Error('TTS request timed out')); });
+          req.write(ttsPayload);
+          req.end();
+        });
+
+        const part = ttsRes.candidates?.[0]?.content?.parts?.[0];
+        if (part?.inlineData?.data) {
+          audioBase64Result = part.inlineData.data;
+          audioMimeType = part.inlineData.mimeType || "audio/wav";
+        }
+      } catch (ttsErr) {
+        console.error('[Gemini TTS 生成エラー]:', ttsErr.message);
+      }
+
+      const displayText = followUpText
+        .replace(/こうしちゅうとうきょういくがっこう/g, '高志中等教育学校')
+        .replace(/こうしちゅうとう/g, '高志中等')
+        .replace(/こうし/g, '高志');
+
+      resolve({
+        questionText: displayText,
+        spokenText: followUpText,
+        audioBase64: audioBase64Result,
+        mimeType: audioMimeType
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 // 認証済みトークン保持マップ (token -> { username, expiresAt })
 const activeTokens = new Map();
 
@@ -513,6 +677,55 @@ const server = http.createServer(async (req, res) => {
         res.end(resData);
       } catch (err) {
         console.error('[Gemini音声評価エラー]:', err.message || err);
+        const errData = JSON.stringify({ success: false, error: err.message || String(err) });
+        res.writeHead(500, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Length': Buffer.byteLength(errData, 'utf-8')
+        });
+        res.end(errData);
+      }
+    });
+    return;
+  }
+
+  // 3.5. Gemini 動的追加質問・音声生成 API エンドポイント（認証必須）
+  if (req.method === 'POST' && parsedUrl.pathname === '/api/generate-followup') {
+    const session = validateToken(req.headers.authorization);
+    if (!session) {
+      console.warn('[未認証アクセス拒否] /api/generate-followup');
+      const errData = JSON.stringify({ success: false, error: '認証が必要です。ログインしてください。' });
+      res.writeHead(401, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(errData, 'utf-8')
+      });
+      return res.end(errData);
+    }
+    const bodyChunks = [];
+    req.on('data', chunk => bodyChunks.push(chunk));
+    req.on('end', async () => {
+      try {
+        const body = Buffer.concat(bodyChunks).toString('utf-8');
+        const payload = JSON.parse(body || '{}');
+        const { question, answer, audio, mimeType } = payload;
+        
+        console.log(`[Gemini追加質問生成開始] 設問: ${question?.id || '不明'}`);
+        const result = await generateFollowUpWithGemini(question, answer, audio, mimeType);
+        console.log(`[Gemini追加質問生成完了] 質問: ${result.questionText} (音声生成: ${!!result.audioBase64})`);
+
+        const resData = JSON.stringify({
+          success: true,
+          questionText: result.questionText,
+          spokenText: result.spokenText,
+          audioBase64: result.audioBase64,
+          mimeType: result.mimeType
+        });
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Length': Buffer.byteLength(resData, 'utf-8')
+        });
+        res.end(resData);
+      } catch (err) {
+        console.error('[Gemini追加質問生成エラー]:', err.message || err);
         const errData = JSON.stringify({ success: false, error: err.message || String(err) });
         res.writeHead(500, {
           'Content-Type': 'application/json; charset=utf-8',

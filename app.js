@@ -126,16 +126,56 @@ class InterviewApp {
     }
   }
 
-  // --- Web Audio API 初期化（iOS User Gesture 内で呼び出してロック解除） ---
+  // --- Web Audio API 初期化（コンプレッサー＆マスターゲインによる音量均一化） ---
   initAudioContext() {
     if (!this.audioCtx) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (AudioContextClass) {
         this.audioCtx = new AudioContextClass();
+        try {
+          // 音量のばらつき（急激な大小変化）を抑えて均一化するコンプレッサー
+          this.compressor = this.audioCtx.createDynamicsCompressor();
+          this.compressor.threshold.setValueAtTime(-24, this.audioCtx.currentTime);
+          this.compressor.knee.setValueAtTime(30, this.audioCtx.currentTime);
+          this.compressor.ratio.setValueAtTime(12, this.audioCtx.currentTime);
+          this.compressor.attack.setValueAtTime(0.003, this.audioCtx.currentTime);
+          this.compressor.release.setValueAtTime(0.25, this.audioCtx.currentTime);
+
+          // マスターゲイン
+          this.masterGain = this.audioCtx.createGain();
+          this.masterGain.gain.setValueAtTime(1.0, this.audioCtx.currentTime);
+
+          this.compressor.connect(this.masterGain);
+          this.masterGain.connect(this.audioCtx.destination);
+        } catch (e) {
+          console.warn("コンプレッサーの初期化に失敗しました:", e);
+        }
       }
     }
     if (this.audioCtx && this.audioCtx.state === "suspended") {
       this.audioCtx.resume();
+    }
+  }
+
+  // --- 音声バッファのピーク検出と正規化ゲイン計算（音量自動ノーマライズ） ---
+  calculateNormalizeGain(audioBuffer, targetPeak = 0.85) {
+    if (!audioBuffer) return 1.0;
+    try {
+      let maxPeak = 0;
+      const numChannels = audioBuffer.numberOfChannels;
+      for (let c = 0; c < numChannels; c++) {
+        const data = audioBuffer.getChannelData(c);
+        const step = Math.max(1, Math.floor(data.length / 5000)); // 高速サンプリング
+        for (let i = 0; i < data.length; i += step) {
+          const val = Math.abs(data[i]);
+          if (val > maxPeak) maxPeak = val;
+        }
+      }
+      if (maxPeak < 0.05) return 1.0; // 極小音・無音はそのまま
+      const gain = targetPeak / maxPeak;
+      return Math.min(Math.max(gain, 0.4), 2.2); // 極端な増幅・減衰を抑えるリミット
+    } catch (e) {
+      return 1.0;
     }
   }
 
@@ -496,11 +536,22 @@ class InterviewApp {
   // --- 音声録音の停止とBlob化 ---
   stopRecordingAudio() {
     return new Promise((resolve) => {
+      const restoreSession = () => {
+        if (navigator.audioSession) {
+          try {
+            navigator.audioSession.type = "playback";
+          } catch(e) {}
+        }
+      };
+
       if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
         if (this.mediaStream) {
-          this.mediaStream.getTracks().forEach(t => t.stop());
+          this.mediaStream.getTracks().forEach(t => {
+            try { t.stop(); } catch(e) {}
+          });
           this.mediaStream = null;
         }
+        restoreSession();
         resolve(this.recordedAudioBlob || null);
         return;
       }
@@ -510,10 +561,13 @@ class InterviewApp {
         const blob = new Blob(this.audioChunks, { type: mime });
         this.recordedAudioBlob = blob;
         if (this.mediaStream) {
-          this.mediaStream.getTracks().forEach(t => t.stop());
+          this.mediaStream.getTracks().forEach(t => {
+            try { t.stop(); } catch(e) {}
+          });
           this.mediaStream = null;
         }
         this.mediaRecorder = null;
+        restoreSession();
         resolve(blob);
       };
 
@@ -522,10 +576,13 @@ class InterviewApp {
       } catch (e) {
         console.warn("Error stopping MediaRecorder:", e);
         if (this.mediaStream) {
-          this.mediaStream.getTracks().forEach(t => t.stop());
+          this.mediaStream.getTracks().forEach(t => {
+            try { t.stop(); } catch(e) {}
+          });
           this.mediaStream = null;
         }
         this.mediaRecorder = null;
+        restoreSession();
         resolve(null);
       }
     });
@@ -1574,9 +1631,15 @@ class InterviewApp {
         // ロード中にユーザーが画面離脱またはスキップした場合は再生中止
         if (!this.isSpeaking) return;
 
+        // 音量自動ノーマライズとコンプレッサー接続
+        const normGain = this.calculateNormalizeGain(buffer, 0.85);
+        const gainNode = this.audioCtx.createGain();
+        gainNode.gain.setValueAtTime(normGain, this.audioCtx.currentTime);
+
         const source = this.audioCtx.createBufferSource();
         source.buffer = buffer;
-        source.connect(this.audioCtx.destination);
+        source.connect(gainNode);
+        gainNode.connect(this.compressor || this.audioCtx.destination);
         this.currentAudioSource = source;
 
         let hasFinished = false;
@@ -1663,9 +1726,15 @@ class InterviewApp {
         const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
         if (!this.isSpeaking) return;
 
+        // 音量自動ノーマライズとコンプレッサー接続
+        const normGain = this.calculateNormalizeGain(audioBuffer, 0.85);
+        const gainNode = this.audioCtx.createGain();
+        gainNode.gain.setValueAtTime(normGain, this.audioCtx.currentTime);
+
         const source = this.audioCtx.createBufferSource();
         source.buffer = audioBuffer;
-        source.connect(this.audioCtx.destination);
+        source.connect(gainNode);
+        gainNode.connect(this.compressor || this.audioCtx.destination);
         this.currentAudioSource = source;
 
         let hasFinished = false;

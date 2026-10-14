@@ -209,22 +209,12 @@ class InterviewApp {
       this.currentSpeechText = turnText;
 
       if (this.currentMode === "ai-voice") {
-        // AI実践モード：音声専用ディスプレイに反映
-        if (this.voiceTranscriptDisplay) {
-          if (turnText) {
-            this.voiceTranscriptDisplay.innerHTML = `<span class="text-on-surface">${turnText}</span>`;
-          } else {
-            this.voiceTranscriptDisplay.innerHTML = `<span class="text-on-surface-variant/60 italic text-xs sm:text-sm">マイクに向かって回答をお話しください…</span>`;
-          }
-        }
-        if (this.voiceCharCount) {
-          this.voiceCharCount.innerText = `${turnText.length} 文字`;
-        }
+        // AI実践モード：文字は画面に表示せず、音声認識中ステータスのみ表示
         if (this.voiceGuideText) {
-          this.voiceGuideText.innerText = "音声を認識中… 話し終えたら完了ボタンを押してください";
+          this.voiceGuideText.innerText = "音声を認識しています… 話し終えたら「回答完了」を押してください";
         }
         if (this.voiceIndicatorDot) {
-          this.voiceIndicatorDot.className = "w-2 h-2 rounded-full bg-secondary animate-ping";
+          this.voiceIndicatorDot.className = "w-2.5 h-2.5 rounded-full bg-secondary animate-ping";
         }
       } else {
         // 従来モード（練習・本番）：手動編集されていない場合のみテキストエリアに自動反映
@@ -811,13 +801,9 @@ class InterviewApp {
     }
     if (this.charCount) this.charCount.innerText = "0 文字";
 
-    // 音声専用display
-    if (this.voiceTranscriptDisplay) {
-      this.voiceTranscriptDisplay.innerHTML = `<span class="text-on-surface-variant/60 italic text-xs sm:text-sm">マイクに向かって回答をお話しください…</span>`;
-    }
-    if (this.voiceCharCount) this.voiceCharCount.innerText = "0 文字";
-    if (this.voiceGuideText) this.voiceGuideText.innerText = "マイクボタンを押して話し始めてください";
-    if (this.voiceIndicatorDot) this.voiceIndicatorDot.className = "w-2 h-2 rounded-full bg-outline";
+    // 音声専用ステータス
+    if (this.voiceGuideText) this.voiceGuideText.innerText = "マイクボタンを押して回答をお話しください。話し終えたら完了ボタンを押します。";
+    if (this.voiceIndicatorDot) this.voiceIndicatorDot.className = "w-2.5 h-2.5 rounded-full bg-outline";
   }
 
   startAnsweringTurn() {
@@ -912,7 +898,9 @@ class InterviewApp {
       : (this.speechTranscript ? this.speechTranscript.value.trim() : this.currentSpeechText.trim());
 
     // タイムラインに受検者の発言を追加
-    const displayText = answerText || "🎙（音声を録音・送信しました）";
+    const displayText = (this.currentMode === "ai-voice")
+      ? "🎙（音声で回答しました）"
+      : (answerText || "🎙（音声を録音・送信しました）");
     this.addChatMessage("candidate", displayText);
 
     // 追加質問（深掘り）の判定

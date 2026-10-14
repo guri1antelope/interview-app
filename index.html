@@ -318,18 +318,17 @@
               </div>
             </div>
 
-            <!-- AI実践モード用：音声回答表示エリア（音声入力専用・手動テキスト入力なし） -->
-            <div id="voice-answer-container" class="hidden relative bg-surface-container-low border border-surface-variant/70 rounded-xl p-3.5 sm:p-4 min-h-[90px] sm:min-h-[110px] flex flex-col justify-between transition-all">
-              <div id="voice-transcript-display" class="text-sm sm:text-base text-on-surface leading-relaxed min-h-[48px] select-none break-words">
-                <span class="text-on-surface-variant/60 italic text-xs sm:text-sm">マイクに向かって回答をお話しください…</span>
+            <!-- AI実践モード用：音声回答エリア（文字非表示・完全音声専任） -->
+            <div id="voice-answer-container" class="hidden relative bg-surface-container-low border border-surface-variant/70 rounded-xl p-4 sm:p-5 min-h-[90px] sm:min-h-[105px] flex flex-col justify-center items-center text-center transition-all">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span id="voice-indicator-dot" class="w-2.5 h-2.5 rounded-full bg-outline"></span>
+                <span id="voice-guide-title" class="text-xs sm:text-sm font-bold text-primary">音声回答モード（文字は表示されません）</span>
               </div>
-              <div class="flex items-center justify-between pt-2 border-t border-surface-container/60 mt-2">
-                <div class="flex items-center gap-1.5">
-                  <span id="voice-indicator-dot" class="w-2 h-2 rounded-full bg-outline"></span>
-                  <span id="voice-guide-text" class="text-[11px] text-on-surface-variant font-medium">マイクボタンを押して話し始めてください</span>
-                </div>
-                <span id="voice-char-count" class="text-[11px] text-outline font-semibold">0 文字</span>
-              </div>
+              <p id="voice-guide-text" class="text-[11px] sm:text-xs text-on-surface-variant">
+                マイクボタンを押して回答をお話しください。話し終えたら完了ボタンを押します。
+              </p>
+              <div id="voice-transcript-display" class="hidden"></div>
+              <span id="voice-char-count" class="hidden"></span>
             </div>
 
             <!-- アクション操作ボタン -->

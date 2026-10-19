@@ -976,11 +976,15 @@ class InterviewApp {
 
   // --- 回答完了処理 ---
   async handleSubmitAnswer() {
-    this.setInputAcceptance(false);
     this.updateActionButton("analyzing");
     if (this.candidateStatus) {
       this.candidateStatus.innerText = "🤖 音声を分析しています…";
     }
+
+    // ケツ切れ防止：話し終わりの語尾（〜です、〜でした等）を漏らさないよう500msの余韻バッファを自動確保
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    this.setInputAcceptance(false);
 
     // 録音停止＆Blob取得
     const audioBlob = await this.stopRecordingAudio();

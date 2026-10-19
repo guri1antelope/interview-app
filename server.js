@@ -190,7 +190,7 @@ ${userText ? `【補足・入力テキスト】: ${userText}` : ''}
 
 以下の要件に従い、必ず指定のJSON形式のみで出力してください:
 ※練習のテンポを落とさず即座に次へ進めるよう、長文は書かず各項目とも短く的確にまとめてください（面接終了後に詳しい総合レポートを作成します）。
-1. transcript: 音声から聞き取った正確な発話内容（文字起こし）。もし音声が無音や聞き取れない場合は補足テキストを基にするかその旨を記載。
+1. transcript: 音声から聞き取った正確な発話内容（文字起こし）。録音端末のタイミング等により冒頭の挨拶や語尾（「〜です」「〜でした」等）が極僅かに途切れていても、全体の文脈から自然に補完・復元して正確に書き起こしてください。もし音声が無音や完全に聞き取れない場合は補足テキストを基にするかその旨を記載。
 2. isConclusionFirst: 冒頭で結論（「〜だからです」「理由は〜です」等）を言えているか (boolean: true または false)。
 3. volumeEvaluation: 発話量の適切さ ("短め", "ちょうど良い", "長め" のいずれか)。
 4. goodPoint: 良かった点（小学6年生向けに温かく、1〜2行・40〜60文字程度で簡潔に）。
@@ -371,6 +371,7 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
       // 1. 追加質問テキスト生成 (Gemini 2.5 Flash)
       const promptText = `あなたは新潟市立高志中等教育学校の入学者選抜（面接）の面接官です。
 以下の本質問に対する受験生（小学6年生）の回答を聞いて、回答内容を深掘りする自然な「追加質問」を1問だけ作成してください。
+また、音声から聞き取った受験生の回答内容を「transcribedAnswer」に書き起こしてください。
 
 【本質問】: ${qText}
 【出題意図】: ${intent}
@@ -382,9 +383,12 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
 2. 小学生が落ち着いて答えられるよう、丁寧で温かい面接官の口調にしてください。
 3. 質問文の長さは45〜75文字程度にしてください。
 4. 読み上げを考慮し、「高志中等」は「こうしちゅうとう」、「高志」は「こうし」とひらがなで表記してください。
+5. 文字起こし（transcribedAnswer）の補完注意点:
+録音機器のタイミング等により、発話の最初（冒頭の挨拶や主語など）や最後（語尾の「〜です」「〜でした」「〜と考えます」など）が極僅かに途切れていたり聞き取りにくかったりする場合があります。その場合でも、全体の文脈と日本語として自然な文章になるよう、欠落した冒頭や語尾を自然に補完・復元して正確に書き起こしてください。
 
 必ず以下のJSONフォーマットのみで出力してください:
 {
+  "transcribedAnswer": "受験生が話した言葉の文字起こし（要約ではなく正確な発話内容）",
   "followUpQuestion": "質問文"
 }`;
 
@@ -736,6 +740,7 @@ const server = http.createServer(async (req, res) => {
           success: true,
           questionText: result.questionText,
           spokenText: result.spokenText,
+          transcribedAnswer: result.transcribedAnswer,
           audioBase64: result.audioBase64,
           mimeType: result.mimeType
         });

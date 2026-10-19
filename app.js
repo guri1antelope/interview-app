@@ -1205,75 +1205,75 @@ class InterviewApp {
     const followUpQ = this.currentFollowUpQuestion || "";
 
     this.modalFeedbackContent.innerHTML = `
-      <div class="space-y-2.5">
+      <div class="space-y-2">
         <!-- 最終結果画面と同一のやり取り履歴（吹き出しタイムライン） -->
-        <div class="p-2.5 sm:p-3 bg-surface-container-low rounded-xl space-y-2 border border-surface-variant/30 text-left">
+        <div class="p-2 sm:p-2.5 bg-surface-container-low rounded-xl space-y-1.5 border border-surface-variant/30 text-left">
           <!-- 1. 先生の質問 -->
-          <div class="flex items-start gap-2 max-w-[95%]">
-            <div class="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">先</div>
+          <div class="flex items-start gap-1.5 max-w-[95%]">
+            <div class="w-5 h-5 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-[9px] flex-shrink-0 mt-0.5 shadow-xs">先</div>
             <div class="space-y-0.5">
-              <span class="text-[10px] font-bold text-primary">先生の質問</span>
-              <div class="p-2.5 rounded-xl rounded-tl-none bg-surface-container-lowest text-on-surface shadow-xs border border-surface-container text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">「${qText.trim()}」</div>
+              <span class="text-[9px] font-bold text-primary">先生の質問</span>
+              <div class="p-2 rounded-xl rounded-tl-none bg-surface-container-lowest text-on-surface shadow-xs border border-surface-container text-xs leading-relaxed whitespace-pre-wrap">「${qText.trim()}」</div>
             </div>
           </div>
 
           <!-- 2. 受検生の回答 -->
-          <div class="flex items-start gap-2 max-w-[95%] ml-auto flex-row-reverse">
-            <div class="w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">${userInitial}</div>
+          <div class="flex items-start gap-1.5 max-w-[95%] ml-auto flex-row-reverse">
+            <div class="w-5 h-5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[9px] flex-shrink-0 mt-0.5 shadow-xs">${userInitial}</div>
             <div class="space-y-0.5 text-right">
-              <span class="text-[10px] font-bold text-secondary">${userName}さんの回答</span>
-              <div class="p-2.5 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm text-left leading-relaxed whitespace-pre-wrap">「${(initialAns || "（無回答）").trim()}」</div>
+              <span class="text-[9px] font-bold text-secondary">${userName}さんの回答</span>
+              <div class="p-2 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs text-left leading-relaxed whitespace-pre-wrap">「${(initialAns || "（無回答）").trim()}」</div>
             </div>
           </div>
 
           <!-- 3. 追加質問＆追加回答（存在する場合） -->
           ${followUpQ ? `
-            <div class="pt-2 border-t border-surface-variant/30 space-y-2">
-              <div class="flex items-start gap-2 max-w-[95%]">
-                <div class="w-6 h-6 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">追</div>
+            <div class="pt-1.5 border-t border-surface-variant/30 space-y-1.5">
+              <div class="flex items-start gap-1.5 max-w-[95%]">
+                <div class="w-5 h-5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant flex items-center justify-center font-bold text-[9px] flex-shrink-0 mt-0.5 shadow-xs">追</div>
                 <div class="space-y-0.5">
-                  <span class="text-[10px] font-bold text-tertiary">追加質問</span>
-                  <div class="p-2.5 rounded-xl rounded-tl-none bg-amber-50/60 text-on-surface shadow-xs border border-tertiary/30 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">「${followUpQ.trim()}」</div>
+                  <span class="text-[9px] font-bold text-tertiary">追加質問</span>
+                  <div class="p-2 rounded-xl rounded-tl-none bg-amber-50/60 text-on-surface shadow-xs border border-tertiary/30 text-xs leading-relaxed whitespace-pre-wrap">「${followUpQ.trim()}」</div>
                 </div>
               </div>
 
-              <div class="flex items-start gap-2 max-w-[95%] ml-auto flex-row-reverse">
-                <div class="w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">${userInitial}</div>
+              <div class="flex items-start gap-1.5 max-w-[95%] ml-auto flex-row-reverse">
+                <div class="w-5 h-5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[9px] flex-shrink-0 mt-0.5 shadow-xs">${userInitial}</div>
                 <div class="space-y-0.5 text-right">
-                  <span class="text-[10px] font-bold text-secondary">${userName}さんの追加回答</span>
-                  <div class="p-2.5 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm text-left leading-relaxed whitespace-pre-wrap">「${(followUpAns || "（無回答）").trim()}」</div>
+                  <span class="text-[9px] font-bold text-secondary">${userName}さんの追加回答</span>
+                  <div class="p-2 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs text-left leading-relaxed whitespace-pre-wrap">「${(followUpAns || "（無回答）").trim()}」</div>
                 </div>
               </div>
             </div>
           ` : ""}
         </div>
 
-        <div class="p-2.5 sm:p-3 rounded-xl bg-secondary-fixed/40 border border-secondary/30">
-          <h4 class="font-bold text-secondary text-[11px] sm:text-xs mb-0.5">良かった点</h4>
-          <p class="text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap">${feedback.goodPoint}</p>
+        <div class="p-2 sm:p-2.5 rounded-xl bg-secondary-fixed/40 border border-secondary/30">
+          <h4 class="font-bold text-secondary text-[11px] mb-0.5">良かった点</h4>
+          <p class="text-xs text-on-surface leading-snug whitespace-pre-wrap">${feedback.goodPoint}</p>
         </div>
-        <div class="p-2.5 sm:p-3 rounded-xl bg-tertiary-container/20 border border-tertiary/30">
-          <h4 class="font-bold text-tertiary text-[11px] sm:text-xs mb-0.5">もっと良くなるアドバイス</h4>
-          <p class="text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap">${feedback.advice}</p>
+        <div class="p-2 sm:p-2.5 rounded-xl bg-tertiary-container/20 border border-tertiary/30">
+          <h4 class="font-bold text-tertiary text-[11px] mb-0.5">もっと良くなるアドバイス</h4>
+          <p class="text-xs text-on-surface leading-snug whitespace-pre-wrap">${feedback.advice}</p>
         </div>
         ${feedback.mannerFeedback ? `
-        <div class="p-2.5 sm:p-3 rounded-xl bg-primary-fixed/20 border border-primary/20">
-          <h4 class="font-bold text-primary text-[11px] sm:text-xs mb-0.5">話し方のポイント（音声分析）</h4>
-          <p class="text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap">${feedback.mannerFeedback}</p>
+        <div class="p-2 sm:p-2.5 rounded-xl bg-primary-fixed/20 border border-primary/20">
+          <h4 class="font-bold text-primary text-[11px] mb-0.5">話し方のポイント（音声分析）</h4>
+          <p class="text-xs text-on-surface leading-snug whitespace-pre-wrap">${feedback.mannerFeedback}</p>
         </div>
         ` : ""}
-        <div class="grid grid-cols-3 gap-1.5 text-center text-caption pt-0.5">
-          <div class="p-1.5 rounded-lg bg-surface-container">
-            <p class="text-outline text-[9px] sm:text-[10px]">結論ファースト</p>
-            <p class="font-bold text-primary text-xs sm:text-sm">${feedback.isConclusionFirst ? "⭕ できてる" : "🔺 意識しよう"}</p>
+        <div class="grid grid-cols-3 gap-1 text-center text-caption pt-0.5">
+          <div class="p-1 rounded-lg bg-surface-container">
+            <p class="text-outline text-[9px]">結論ファースト</p>
+            <p class="font-bold text-primary text-xs">${feedback.isConclusionFirst ? "⭕ できてる" : "🔺 意識しよう"}</p>
           </div>
-          <div class="p-1.5 rounded-lg bg-surface-container">
-            <p class="text-outline text-[9px] sm:text-[10px]">キーワード</p>
-            <p class="font-bold text-secondary text-xs sm:text-sm">${feedback.matchedKeywords && feedback.matchedKeywords.length > 0 ? "⭕バッチリ" : "🔺もう少し"}</p>
+          <div class="p-1 rounded-lg bg-surface-container">
+            <p class="text-outline text-[9px]">キーワード</p>
+            <p class="font-bold text-secondary text-xs">${feedback.matchedKeywords && feedback.matchedKeywords.length > 0 ? "⭕バッチリ" : "🔺もう少し"}</p>
           </div>
-          <div class="p-1.5 rounded-lg bg-surface-container">
-            <p class="text-outline text-[9px] sm:text-[10px]">ボリューム</p>
-            <p class="font-bold text-primary text-xs sm:text-sm">${feedback.volumeCheck}</p>
+          <div class="p-1 rounded-lg bg-surface-container">
+            <p class="text-outline text-[9px]">ボリューム</p>
+            <p class="font-bold text-primary text-xs">${feedback.volumeCheck}</p>
           </div>
         </div>
       </div>
@@ -1285,7 +1285,14 @@ class InterviewApp {
 
     this.feedbackModal.classList.remove("hidden");
     this.btnModalNext.onclick = async () => {
+      // iOSオーディオセッションを再生モードへ復帰＆AudioContext再開
+      if (navigator.audioSession) {
+        try { navigator.audioSession.type = "playback"; } catch(e) {}
+      }
       await this.initAudioContext();
+      if (this.audioCtx && this.audioCtx.state !== "running") {
+        try { await this.audioCtx.resume(); } catch(e) {}
+      }
       this.feedbackModal.classList.add("hidden");
       this.nextQuestion();
     };
@@ -1743,8 +1750,8 @@ class InterviewApp {
     // 1. Web Audio API が使用可能な場合は AudioContext で再生（iOSオーディオ排他ロック競合を完全回避）
     if (this.audioCtx) {
       try {
-        if (this.audioCtx.state === "suspended") {
-          await this.audioCtx.resume();
+        if (this.audioCtx.state !== "running") {
+          try { await this.audioCtx.resume(); } catch(e) {}
         }
 
         const buffer = await this.loadAudioBuffer(audioPath);
@@ -1761,13 +1768,19 @@ class InterviewApp {
           this.currentAudioSource = source;
 
           let hasFinished = false;
+          let safetyTimer = null;
           const finish = () => {
             if (hasFinished) return;
             hasFinished = true;
+            if (safetyTimer) clearTimeout(safetyTimer);
             this.isSpeaking = false;
             this.currentAudioSource = null;
             if (onEndCallback) onEndCallback();
           };
+
+          // セーフティガード：音声長＋1.5秒（または最大10秒）で確実に回答ターンへ移行しフリーズを物理的に防止
+          const maxDuration = Math.max(2, (buffer.duration || 6) + 1.5) * 1000;
+          safetyTimer = setTimeout(finish, maxDuration);
 
           source.onended = finish;
           source.start(0);
@@ -1784,9 +1797,11 @@ class InterviewApp {
       this.currentAudio = audio;
 
       let hasFinished = false;
+      let safetyTimer = null;
       const finish = () => {
         if (hasFinished) return;
         hasFinished = true;
+        if (safetyTimer) clearTimeout(safetyTimer);
         this.isSpeaking = false;
         if (this.currentAudio) {
           try {
@@ -1798,8 +1813,12 @@ class InterviewApp {
         if (onEndCallback) onEndCallback();
       };
 
+      // セーフティガード（最大10秒）
+      safetyTimer = setTimeout(finish, 10000);
+
       audio.onended = finish;
       audio.onerror = (e) => {
+        if (safetyTimer) clearTimeout(safetyTimer);
         console.warn("音声ファイルの読み込み/再生エラー、ブラウザ音声で読み上げます:", audioPath, e);
         this.fallbackToSpeech(onEndCallback);
       };
@@ -1846,8 +1865,8 @@ class InterviewApp {
     // 1. Web Audio API でデコードして再生
     if (this.audioCtx) {
       try {
-        if (this.audioCtx.state === "suspended") {
-          await this.audioCtx.resume();
+        if (this.audioCtx.state !== "running") {
+          try { await this.audioCtx.resume(); } catch(e) {}
         }
 
         const binaryStr = window.atob(base64Data);
@@ -1874,13 +1893,18 @@ class InterviewApp {
         this.currentAudioSource = source;
 
         let hasFinished = false;
+        let safetyTimer = null;
         const finish = () => {
           if (hasFinished) return;
           hasFinished = true;
+          if (safetyTimer) clearTimeout(safetyTimer);
           this.isSpeaking = false;
           this.currentAudioSource = null;
           if (onEndCallback) onEndCallback();
         };
+
+        const maxDuration = Math.max(2, (audioBuffer.duration || 6) + 1.5) * 1000;
+        safetyTimer = setTimeout(finish, maxDuration);
 
         source.onended = finish;
         source.start(0);
@@ -1895,9 +1919,11 @@ class InterviewApp {
     this.currentAudio = audio;
 
     let hasFinished = false;
+    let safetyTimer = null;
     const finish = () => {
       if (hasFinished) return;
       hasFinished = true;
+      if (safetyTimer) clearTimeout(safetyTimer);
       this.isSpeaking = false;
       if (this.currentAudio) {
         try {
@@ -1909,13 +1935,17 @@ class InterviewApp {
       if (onEndCallback) onEndCallback();
     };
 
+    safetyTimer = setTimeout(finish, 10000);
+
     audio.onended = finish;
     audio.onerror = (e) => {
+      if (safetyTimer) clearTimeout(safetyTimer);
       console.warn("Base64 音声再生エラー:", e);
       finish();
     };
 
     audio.play().catch(e => {
+      if (safetyTimer) clearTimeout(safetyTimer);
       console.warn("Base64 音声自動再生エラー:", e);
       finish();
     });

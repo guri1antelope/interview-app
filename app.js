@@ -205,6 +205,33 @@ class InterviewApp {
     }
   }
 
+  // --- 全設問音声のバックグラウンド事前プリロード（Safariで2問目から音が出なくなる問題を完全解消） ---
+  preloadAllQuestionAudios() {
+    if (typeof INTERVIEW_QUESTIONS === "undefined" || !Array.isArray(INTERVIEW_QUESTIONS)) return;
+    this.initAudioContext();
+    setTimeout(() => {
+      INTERVIEW_QUESTIONS.forEach(q => {
+        const path = this.getVoiceFilePath(q.id);
+        if (path && !this.audioBufferCache.has(path)) {
+          this.loadAudioBuffer(path).catch(() => {});
+        }
+      });
+    }, 100);
+  }
+
+  // --- 認証付きAPI呼び出し共通ヘルパー ---
+  fetchWithAuth(url, options = {}) {
+    const headers = options.headers || {};
+    return fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.authToken || ''}`,
+        ...headers
+      }
+    });
+  }
+
   // --- 音声認識インスタンスの都度生成（※iOSのインスタンス再利用不可バグを完全回避） ---
   createRecognitionInstance() {
     if (this.recognition) {
@@ -526,20 +553,26 @@ class InterviewApp {
         console.warn("getUserMedia is not supported on this browser/context.");
         return false;
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+      } catch (err) {
+        console.warn("getUserMedia with advanced constraints failed, falling back to simple audio:", err);
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       this.mediaStream = stream;
 
       const mimeType = this.getSupportedAudioMimeType();
       const options = mimeType ? { mimeType } : {};
       const recorder = new MediaRecorder(stream, options);
       this.mediaRecorder = recorder;
-      this.recordedMimeType = recorder.mimeType || mimeType || 'audio/webm';
+      this.recordedMimeType = recorder.mimeType || mimeType || 'audio/mp4';
 
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
@@ -564,6 +597,9 @@ class InterviewApp {
             navigator.audioSession.type = "playback";
           } catch(e) {}
         }
+        if (this.audioCtx && this.audioCtx.state === "suspended") {
+          try { this.audioCtx.resume(); } catch(e) {}
+        }
       };
 
       if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
@@ -579,7 +615,7 @@ class InterviewApp {
       }
 
       this.mediaRecorder.onstop = () => {
-        const mime = this.recordedMimeType || 'audio/webm';
+        const mime = this.recordedMimeType || 'audio/mp4';
         const blob = new Blob(this.audioChunks, { type: mime });
         this.recordedAudioBlob = blob;
         if (this.mediaStream) {
@@ -735,6 +771,7 @@ class InterviewApp {
       this.showLoginModal();
       return;
     }
+    this.preloadAllQuestionAudios();
     this.currentMode = "practice";
     if (selectedQId) {
       this.questionList = INTERVIEW_QUESTIONS.filter(q => q.id === selectedQId);
@@ -760,6 +797,7 @@ class InterviewApp {
       this.showLoginModal();
       return;
     }
+    this.preloadAllQuestionAudios();
     this.currentMode = "exam";
     const sList = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "S")]).slice(0, 3);
     const aList = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "A")]).slice(0, 2);
@@ -781,6 +819,7 @@ class InterviewApp {
       this.showLoginModal();
       return;
     }
+    this.preloadAllQuestionAudios();
     this.currentMode = "ai-voice";
     const s = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "S")])[0];
     const a = this.shuffle([...INTERVIEW_QUESTIONS.filter(q => q.priority === "A")])[0];
@@ -1073,16 +1112,15 @@ class InterviewApp {
 
     try {
       let audioBase64 = null;
-      let mimeType = "audio/webm";
+      let mimeType = this.recordedMimeType || "audio/mp4";
       if (audioBlob && audioBlob.size > 0) {
-        mimeType = audioBlob.type || "audio/webm";
+        mimeType = audioBlob.type || this.recordedMimeType || "audio/mp4";
         audioBase64 = await this.blobToBase64(audioBlob);
       }
 
       // 動的追加質問API呼び出し
       const res = await this.fetchWithAuth("/api/generate-followup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: this.currentQuestion,
           answer: initialAnswer,
@@ -1288,15 +1326,27 @@ class InterviewApp {
     this.btnModalNext.innerText = isLast ? "面接結果を見る" : "次の質問へ進む";
 
     this.feedbackModal.classList.remove("hidden");
-    this.btnModalNext.onclick = async () => {
-      // iOSオーディオセッションを再生モードへ復帰＆AudioContext再開
+    this.btnModalNext.onclick = () => {
+      // iOS Safari アンロック：タップの同期コンテキストで即座にAudioContextを覚醒
+      this.initAudioContext();
+      if (this.audioCtx) {
+        if (this.audioCtx.state === "suspended") {
+          try { this.audioCtx.resume(); } catch(e) {}
+        }
+        try {
+          // 無音バッファを再生してiOSオーディオ排他ロックを完全解除
+          const dummy = this.audioCtx.createBuffer(1, 1, 22050);
+          const src = this.audioCtx.createBufferSource();
+          src.buffer = dummy;
+          src.connect(this.audioCtx.destination);
+          src.start(0);
+        } catch(e) {}
+      }
+
       if (navigator.audioSession) {
         try { navigator.audioSession.type = "playback"; } catch(e) {}
       }
-      await this.initAudioContext();
-      if (this.audioCtx && this.audioCtx.state !== "running") {
-        try { await this.audioCtx.resume(); } catch(e) {}
-      }
+
       this.feedbackModal.classList.add("hidden");
       this.nextQuestion();
     };

@@ -453,12 +453,23 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
         followUpText = "具体的に、その時どのような工夫をしましたか？";
       }
 
+      // TTS読み上げ用テキスト（「こうし」「つらい」の読み間違いを完全防止）
+      const spokenText = followUpText
+        .replace(/高志中等教育学校/g, 'こうしちゅうとうきょういくがっこう')
+        .replace(/高志中等/g, 'こうしちゅうとう')
+        .replace(/高志/g, 'こうし')
+        .replace(/辛い/g, 'つらい')
+        .replace(/辛かった/g, 'つらかった')
+        .replace(/辛く/g, 'つらく')
+        .replace(/辛さ/g, 'つらさ')
+        .replace(/辛けれ/g, 'つらけれ');
+
       // 2. 音声生成 (gemini-3.8-flash-lite-tts, voice: Kore) でWAV音声を高速生成
       const ttsPayload = JSON.stringify({
         contents: [{
           role: "user",
           parts: [{
-            text: followUpText
+            text: spokenText
           }]
         }],
         generationConfig: {
@@ -508,14 +519,14 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
         console.error('[Gemini TTS 生成エラー]:', ttsErr.message);
       }
 
-      const displayText = followUpText
+      const displayText = spokenText
         .replace(/こうしちゅうとうきょういくがっこう/g, '高志中等教育学校')
         .replace(/こうしちゅうとう/g, '高志中等')
         .replace(/こうし/g, '高志');
 
       resolve({
         questionText: displayText,
-        spokenText: followUpText,
+        spokenText: spokenText,
         audioBase64: audioBase64Result,
         mimeType: audioMimeType
       });

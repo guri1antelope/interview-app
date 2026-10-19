@@ -274,19 +274,11 @@ class InterviewApp {
 
     rec.onerror = (event) => {
       console.warn("Speech recognition error:", event.error);
-      // iPadや一部環境でSpeechRecognitionが排他エラー（not-allowed/audio-capture等）になっても、MediaRecorderが生きていれば録音で継続
-      if (this.currentMode === "ai-voice" || this.mediaRecorder) {
-        if (this.candidateStatus && event.error !== "no-speech") {
+      // iPadやモバイルChrome等で排他・権限エラーが出てもalertで止めず、録音（MediaRecorder）で継続
+      if (this.candidateStatus) {
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           this.candidateStatus.innerText = "🎙 音声を録音中… 話し終えたら完了を押してください";
-        }
-        return;
-      }
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        if (!this.mediaStream) {
-          alert("マイクの使用が許可されていません。ブラウザのアドレスバーからマイクを許可してください。");
-        }
-      } else if (event.error !== "no-speech") {
-        if (this.candidateStatus) {
+        } else if (event.error !== "no-speech") {
           this.candidateStatus.innerText = `マイク状況: ${event.error}`;
         }
       }
@@ -984,9 +976,7 @@ class InterviewApp {
       : (this.speechTranscript ? this.speechTranscript.value.trim() : this.currentSpeechText.trim());
 
     // タイムラインに受検者の発言を追加
-    const displayText = (this.currentMode === "ai-voice")
-      ? "🎙（音声で回答しました）"
-      : (answerText || "🎙（音声を録音・送信しました）");
+    const displayText = answerText || "🎙（音声を録音・送信しました）";
     this.addChatMessage("candidate", displayText);
 
     // 追加質問（深掘り）の判定
@@ -1168,15 +1158,34 @@ class InterviewApp {
     });
 
     if (this.currentMode === "practice" || this.currentMode === "ai-voice") {
-      this.showInstantFeedbackModal(feedback);
+      this.showInstantFeedbackModal(feedback, initialAns, followUpAns);
     } else {
       setTimeout(() => this.nextQuestion(), 500);
     }
   }
 
-  showInstantFeedbackModal(feedback) {
+  showInstantFeedbackModal(feedback, initialAns = "", followUpAns = "") {
     this.modalFeedbackContent.innerHTML = `
-      <div class="space-y-2">
+      <div class="space-y-2.5">
+        <!-- あなたの回答（音声認識結果） -->
+        <div class="p-2.5 sm:p-3 rounded-xl bg-surface-container border border-surface-container-high space-y-1.5">
+          <div class="flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px] text-secondary">record_voice_over</span>
+            <h4 class="font-bold text-primary text-[11px] sm:text-xs">あなたの回答（音声認識結果）</h4>
+          </div>
+          <div class="p-2 rounded-lg bg-surface-container-lowest text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap border border-surface-container/60">
+            「${(initialAns || "（無回答）").trim()}」
+          </div>
+          ${followUpAns ? `
+          <div class="pt-1.5 border-t border-surface-variant/30 space-y-1">
+            <span class="text-[10px] font-bold text-tertiary">追加質問への回答</span>
+            <div class="p-2 rounded-lg bg-surface-container-lowest text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap border border-surface-container/60">
+              「${followUpAns.trim()}」
+            </div>
+          </div>
+          ` : ""}
+        </div>
+
         <div class="p-2.5 sm:p-3 rounded-xl bg-secondary-fixed/40 border border-secondary/30">
           <h4 class="font-bold text-secondary text-[11px] sm:text-xs mb-0.5">良かった点</h4>
           <p class="text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap">${feedback.goodPoint}</p>
@@ -1892,14 +1901,19 @@ class InterviewApp {
     }
   }
 
-  // --- 読み上げ用テキスト変換（「高志」を「こうし」にフリガナ化） ---
+  // --- 読み上げ用テキスト変換（「高志」「辛い」などの読み間違い防止） ---
   formatForSpeech(text) {
     if (!text) return "";
     return text
       .replace(/高志中等教育学校/g, "こうしちゅうとうきょういくがっこう")
       .replace(/高志中等/g, "こうしちゅうとう")
       .replace(/本校（高志中等）/g, "本校、こうしちゅうとう")
-      .replace(/高志/g, "こうし");
+      .replace(/高志/g, "こうし")
+      .replace(/辛い/g, "つらい")
+      .replace(/辛かった/g, "つらかった")
+      .replace(/辛く/g, "つらく")
+      .replace(/辛さ/g, "つらさ")
+      .replace(/辛けれ/g, "つらけれ");
   }
 
   async getVoicesAsync() {

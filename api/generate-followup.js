@@ -136,11 +136,22 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // クリーニング（改行や引用符の除去）
+    // クリーニング（改行や引用符の除去、読み間違い防止のフリガナ化）
     followUpText = followUpText.replace(/^["「]/, '').replace(/["」]$/, '').trim();
     if (!followUpText) {
       followUpText = "具体的に、その時どのような工夫をしましたか？";
     }
+
+    // TTS読み上げ用テキスト（「こうし」「つらい」の読み間違いを完全防止）
+    const spokenText = followUpText
+      .replace(/高志中等教育学校/g, 'こうしちゅうとうきょういくがっこう')
+      .replace(/高志中等/g, 'こうしちゅうとう')
+      .replace(/高志/g, 'こうし')
+      .replace(/辛い/g, 'つらい')
+      .replace(/辛かった/g, 'つらかった')
+      .replace(/辛く/g, 'つらく')
+      .replace(/辛さ/g, 'つらさ')
+      .replace(/辛けれ/g, 'つらけれ');
 
     // ステップ2: Gemini TTS (gemini-3.8-flash-lite-tts, voice: Kore) でWAV音声を高速生成
     const ttsUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-lite-tts:generateContent?key=${apiKey}`;
@@ -148,7 +159,7 @@ module.exports = async function handler(req, res) {
       contents: [{
         role: "user",
         parts: [{
-          text: followUpText
+          text: spokenText
         }]
       }],
       generationConfig: {
@@ -177,7 +188,7 @@ module.exports = async function handler(req, res) {
     }
 
     // 画面表示用に「こうし」を「高志」に戻した表示用テキストも用意
-    const displayText = followUpText
+    const displayText = spokenText
       .replace(/こうしちゅうとうきょういくがっこう/g, '高志中等教育学校')
       .replace(/こうしちゅうとう/g, '高志中等')
       .replace(/こうし/g, '高志');
@@ -185,7 +196,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       success: true,
       questionText: displayText,
-      spokenText: followUpText,
+      spokenText: spokenText,
       audioBase64: audioData,
       mimeType: audioMimeType
     });

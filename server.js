@@ -389,7 +389,7 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
 }`;
 
       const textParts = [];
-      if (audioBase64) {
+      if (!studentAnswer && audioBase64) {
         textParts.push({
           inlineData: {
             mimeType: (mimeType || 'audio/webm').split(';')[0],
@@ -403,7 +403,11 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
         contents: [{ parts: textParts }],
         generationConfig: {
           responseMimeType: "application/json",
-          temperature: 0.7
+          temperature: 0.6,
+          maxOutputTokens: 150,
+          thinkingConfig: {
+            thinkingBudget: 0
+          }
         }
       });
 

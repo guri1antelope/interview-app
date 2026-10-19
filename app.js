@@ -127,7 +127,7 @@ class InterviewApp {
   }
 
   // --- Web Audio API 初期化（コンプレッサー＆マスターゲインによる音量均一化） ---
-  initAudioContext() {
+  async initAudioContext() {
     if (!this.audioCtx) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (AudioContextClass) {
@@ -153,7 +153,11 @@ class InterviewApp {
       }
     }
     if (this.audioCtx && this.audioCtx.state === "suspended") {
-      this.audioCtx.resume();
+      try {
+        await this.audioCtx.resume();
+      } catch (e) {
+        console.warn("AudioContext resume failed:", e);
+      }
     }
   }
 
@@ -270,8 +274,17 @@ class InterviewApp {
 
     rec.onerror = (event) => {
       console.warn("Speech recognition error:", event.error);
-      if (event.error === "not-allowed") {
-        alert("マイクの使用が許可されていません。ブラウザのアドレスバーからマイクを許可してください。");
+      // iPadや一部環境でSpeechRecognitionが排他エラー（not-allowed/audio-capture等）になっても、MediaRecorderが生きていれば録音で継続
+      if (this.currentMode === "ai-voice" || this.mediaRecorder) {
+        if (this.candidateStatus && event.error !== "no-speech") {
+          this.candidateStatus.innerText = "🎙 音声を録音中… 話し終えたら完了を押してください";
+        }
+        return;
+      }
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        if (!this.mediaStream) {
+          alert("マイクの使用が許可されていません。ブラウザのアドレスバーからマイクを許可してください。");
+        }
       } else if (event.error !== "no-speech") {
         if (this.candidateStatus) {
           this.candidateStatus.innerText = `マイク状況: ${event.error}`;
@@ -1106,8 +1119,23 @@ class InterviewApp {
       }
 
     } catch (err) {
-      console.warn("動的追加質問APIエラー、固定質問へフォールバックします:", err);
-      this.triggerStaticFollowUp(initialAnswer);
+      console.warn("動的追加質問APIエラー、AI実践モードを維持して進行します:", err);
+      // 固定質問にすり替えず、回答を深掘りする自然な追加質問を動的にセットしてブラウザ音声で発話
+      const fallbackList = this.currentQuestion?.followUpQuestions || [];
+      const fallbackQ = fallbackList[0] || "具体的に、その時どのような工夫をしましたか？もっと詳しく教えてください。";
+      this.currentFollowUpQuestion = fallbackQ;
+      this.addChatMessage("interviewer", this.currentFollowUpQuestion, { isFollowUp: true });
+      this.interviewerStatus.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+        <span>追加質問を読み上げています…</span>
+      `;
+      this.speakText(this.currentFollowUpQuestion, () => {
+        this.interviewerStatus.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-secondary"></span>
+          <span>追加質問に答えてみましょう。</span>
+        `;
+        this.startAnsweringTurn();
+      });
     }
   }
 
@@ -1185,8 +1213,8 @@ class InterviewApp {
     this.btnModalNext.innerText = isLast ? "面接結果を見る" : "次の質問へ進む";
 
     this.feedbackModal.classList.remove("hidden");
-    this.btnModalNext.onclick = () => {
-      this.initAudioContext();
+    this.btnModalNext.onclick = async () => {
+      await this.initAudioContext();
       this.feedbackModal.classList.add("hidden");
       this.nextQuestion();
     };
@@ -1639,78 +1667,88 @@ class InterviewApp {
       return;
     }
 
-    this.initAudioContext();
+    await this.initAudioContext();
 
     // 1. Web Audio API が使用可能な場合は AudioContext で再生（iOSオーディオ排他ロック競合を完全回避）
     if (this.audioCtx) {
       try {
-        const buffer = await this.loadAudioBuffer(audioPath);
-        if (!buffer) {
-          this.isSpeaking = false;
-          if (onEndCallback) onEndCallback();
-          return;
+        if (this.audioCtx.state === "suspended") {
+          await this.audioCtx.resume();
         }
 
-        // ロード中にユーザーが画面離脱またはスキップした場合は再生中止
-        if (!this.isSpeaking) return;
+        const buffer = await this.loadAudioBuffer(audioPath);
+        if (buffer && this.isSpeaking) {
+          // 音量自動ノーマライズとコンプレッサー接続
+          const normGain = this.calculateNormalizeGain(buffer, 0.85);
+          const gainNode = this.audioCtx.createGain();
+          gainNode.gain.setValueAtTime(normGain, this.audioCtx.currentTime);
 
-        // 音量自動ノーマライズとコンプレッサー接続
-        const normGain = this.calculateNormalizeGain(buffer, 0.85);
-        const gainNode = this.audioCtx.createGain();
-        gainNode.gain.setValueAtTime(normGain, this.audioCtx.currentTime);
+          const source = this.audioCtx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(gainNode);
+          gainNode.connect(this.compressor || this.audioCtx.destination);
+          this.currentAudioSource = source;
 
-        const source = this.audioCtx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(gainNode);
-        gainNode.connect(this.compressor || this.audioCtx.destination);
-        this.currentAudioSource = source;
+          let hasFinished = false;
+          const finish = () => {
+            if (hasFinished) return;
+            hasFinished = true;
+            this.isSpeaking = false;
+            this.currentAudioSource = null;
+            if (onEndCallback) onEndCallback();
+          };
 
-        let hasFinished = false;
-        const finish = () => {
-          if (hasFinished) return;
-          hasFinished = true;
-          this.isSpeaking = false;
-          this.currentAudioSource = null;
-          if (onEndCallback) onEndCallback();
-        };
-
-        source.onended = finish;
-        source.start(0);
-        return;
+          source.onended = finish;
+          source.start(0);
+          return;
+        }
       } catch (err) {
         console.warn("Web Audio API 再生エラー、フォールバックを試みます:", err);
       }
     }
 
     // 2. フォールバック（HTMLAudioElement）
-    const audio = new Audio(audioPath);
-    this.currentAudio = audio;
+    try {
+      const audio = new Audio(audioPath);
+      this.currentAudio = audio;
 
-    let hasFinished = false;
-    const finish = () => {
-      if (hasFinished) return;
-      hasFinished = true;
+      let hasFinished = false;
+      const finish = () => {
+        if (hasFinished) return;
+        hasFinished = true;
+        this.isSpeaking = false;
+        if (this.currentAudio) {
+          try {
+            this.currentAudio.pause();
+            this.currentAudio.src = "";
+          } catch(e) {}
+          this.currentAudio = null;
+        }
+        if (onEndCallback) onEndCallback();
+      };
+
+      audio.onended = finish;
+      audio.onerror = (e) => {
+        console.warn("音声ファイルの読み込み/再生エラー、ブラウザ音声で読み上げます:", audioPath, e);
+        this.fallbackToSpeech(onEndCallback);
+      };
+
+      await audio.play();
+      return;
+    } catch (e) {
+      console.warn("HTMLAudio 自動再生エラー、ブラウザ音声で読み上げます:", e);
+      this.fallbackToSpeech(onEndCallback);
+    }
+  }
+
+  // 音声ファイル再生失敗時の確実なブラウザ音声読み上げフォールバック
+  fallbackToSpeech(onEndCallback = null) {
+    if (this.currentQuestion && this.currentQuestion.question) {
+      this.speakText(this.currentQuestion.question, onEndCallback);
+    } else if (onEndCallback) {
       this.isSpeaking = false;
-      if (this.currentAudio) {
-        try {
-          this.currentAudio.pause();
-          this.currentAudio.src = "";
-        } catch(e) {}
-        this.currentAudio = null;
-      }
-      if (onEndCallback) onEndCallback();
-    };
-
-    audio.onended = finish;
-    audio.onerror = (e) => {
-      console.warn("音声ファイルの読み込み/再生エラー:", audioPath, e);
-      finish();
-    };
-
-    audio.play().catch(e => {
-      console.warn("音声の自動再生がブロックされたかエラーです:", e);
-      finish();
-    });
+      onEndCallback();
+    }
   }
 
   // --- Base64 音声（Gemini TTS Kore 生成WAV）の再生制御 ---
@@ -1732,11 +1770,15 @@ class InterviewApp {
       return;
     }
 
-    this.initAudioContext();
+    await this.initAudioContext();
 
     // 1. Web Audio API でデコードして再生
     if (this.audioCtx) {
       try {
+        if (this.audioCtx.state === "suspended") {
+          await this.audioCtx.resume();
+        }
+
         const binaryStr = window.atob(base64Data);
         const len = binaryStr.length;
         const bytes = new Uint8Array(len);

@@ -101,7 +101,8 @@ module.exports = async function handler(req, res) {
 
     const textUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const textParts = [];
-    if (audioBase64) {
+    // テキストが取得できている場合は巨大な音声Base64の送信を省き、最速レスポンスを実現
+    if (!studentAnswer && audioBase64) {
       textParts.push({
         inlineData: {
           mimeType: mimeType.split(';')[0],
@@ -115,7 +116,11 @@ module.exports = async function handler(req, res) {
       contents: [{ parts: textParts }],
       generationConfig: {
         responseMimeType: "application/json",
-        temperature: 0.7
+        temperature: 0.6,
+        maxOutputTokens: 150,
+        thinkingConfig: {
+          thinkingBudget: 0
+        }
       }
     });
 

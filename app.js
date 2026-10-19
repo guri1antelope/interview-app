@@ -1199,24 +1199,52 @@ class InterviewApp {
   }
 
   showInstantFeedbackModal(feedback, initialAns = "", followUpAns = "") {
+    const userName = this.currentUsername || "受検生";
+    const userInitial = userName.charAt(0) || "受";
+    const qText = this.currentQuestion ? this.currentQuestion.question : "";
+    const followUpQ = this.currentFollowUpQuestion || "";
+
     this.modalFeedbackContent.innerHTML = `
       <div class="space-y-2.5">
-        <!-- あなたの回答（音声認識結果） -->
-        <div class="p-2.5 sm:p-3 rounded-xl bg-surface-container border border-surface-container-high space-y-1.5">
-          <div class="flex items-center gap-1.5">
-            <span class="material-symbols-outlined text-[16px] text-secondary">record_voice_over</span>
-            <h4 class="font-bold text-primary text-[11px] sm:text-xs">あなたの回答（音声認識結果）</h4>
-          </div>
-          <div class="p-2 rounded-lg bg-surface-container-lowest text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap border border-surface-container/60">
-            「${(initialAns || "（無回答）").trim()}」
-          </div>
-          ${followUpAns ? `
-          <div class="pt-1.5 border-t border-surface-variant/30 space-y-1">
-            <span class="text-[10px] font-bold text-tertiary">追加質問への回答</span>
-            <div class="p-2 rounded-lg bg-surface-container-lowest text-xs sm:text-[13px] text-on-surface leading-snug whitespace-pre-wrap border border-surface-container/60">
-              「${followUpAns.trim()}」
+        <!-- 最終結果画面と同一のやり取り履歴（吹き出しタイムライン） -->
+        <div class="p-2.5 sm:p-3 bg-surface-container-low rounded-xl space-y-2 border border-surface-variant/30 text-left">
+          <!-- 1. 先生の質問 -->
+          <div class="flex items-start gap-2 max-w-[95%]">
+            <div class="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">先</div>
+            <div class="space-y-0.5">
+              <span class="text-[10px] font-bold text-primary">先生の質問</span>
+              <div class="p-2.5 rounded-xl rounded-tl-none bg-surface-container-lowest text-on-surface shadow-xs border border-surface-container text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">「${qText.trim()}」</div>
             </div>
           </div>
+
+          <!-- 2. 受検生の回答 -->
+          <div class="flex items-start gap-2 max-w-[95%] ml-auto flex-row-reverse">
+            <div class="w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">${userInitial}</div>
+            <div class="space-y-0.5 text-right">
+              <span class="text-[10px] font-bold text-secondary">${userName}さんの回答</span>
+              <div class="p-2.5 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm text-left leading-relaxed whitespace-pre-wrap">「${(initialAns || "（無回答）").trim()}」</div>
+            </div>
+          </div>
+
+          <!-- 3. 追加質問＆追加回答（存在する場合） -->
+          ${followUpQ ? `
+            <div class="pt-2 border-t border-surface-variant/30 space-y-2">
+              <div class="flex items-start gap-2 max-w-[95%]">
+                <div class="w-6 h-6 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">追</div>
+                <div class="space-y-0.5">
+                  <span class="text-[10px] font-bold text-tertiary">追加質問</span>
+                  <div class="p-2.5 rounded-xl rounded-tl-none bg-amber-50/60 text-on-surface shadow-xs border border-tertiary/30 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">「${followUpQ.trim()}」</div>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-2 max-w-[95%] ml-auto flex-row-reverse">
+                <div class="w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-xs">${userInitial}</div>
+                <div class="space-y-0.5 text-right">
+                  <span class="text-[10px] font-bold text-secondary">${userName}さんの追加回答</span>
+                  <div class="p-2.5 rounded-xl rounded-tr-none bg-secondary-container text-on-secondary-container shadow-xs border border-secondary/20 text-xs sm:text-sm text-left leading-relaxed whitespace-pre-wrap">「${(followUpAns || "（無回答）").trim()}」</div>
+                </div>
+              </div>
+            </div>
           ` : ""}
         </div>
 

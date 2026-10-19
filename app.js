@@ -273,12 +273,15 @@ class InterviewApp {
     };
 
     rec.onerror = (event) => {
+      // aborted や no-speech は通常の切断・無音イベントのため無視（エラーとして表示しない）
+      if (event.error === "aborted" || event.error === "no-speech") {
+        return;
+      }
       console.warn("Speech recognition error:", event.error);
-      // iPadやモバイルChrome等で排他・権限エラーが出てもalertで止めず、録音（MediaRecorder）で継続
       if (this.candidateStatus) {
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           this.candidateStatus.innerText = "🎙 音声を録音中… 話し終えたら完了を押してください";
-        } else if (event.error !== "no-speech") {
+        } else {
           this.candidateStatus.innerText = `マイク状況: ${event.error}`;
         }
       }
@@ -286,13 +289,11 @@ class InterviewApp {
 
     rec.onend = () => {
       this.isRecognitionActive = false;
-      // ユーザーが回答中（録音中）であれば自動復帰を試みる（iOSのセッション安定のためディレイ設定）
+      // ユーザーが回答中（録音中）であれば新しいインスタンスで安全に復帰（インスタンス再利用によるabortedバグを完全回避）
       if (this.isAcceptingInput && !this.isSpeaking && this.viewInterview && !this.viewInterview.classList.contains("hidden")) {
         setTimeout(() => {
           if (this.isAcceptingInput && !this.isSpeaking) {
-            try {
-              rec.start();
-            } catch(e) {}
+            this.ensureRecognitionActive();
           }
         }, 150);
       }
@@ -709,6 +710,18 @@ class InterviewApp {
     this.scrollChatToBottom();
   }
 
+  updateLastCandidateMessage(newText) {
+    if (!this.chatTimeline || !newText) return;
+    const candidateBubbles = this.chatTimeline.querySelectorAll(".ml-auto");
+    if (candidateBubbles.length > 0) {
+      const lastBubble = candidateBubbles[candidateBubbles.length - 1];
+      const textDiv = lastBubble.querySelector(".rounded-2xl");
+      if (textDiv) {
+        textDiv.textContent = newText.trim();
+      }
+    }
+  }
+
   scrollChatToBottom() {
     if (!this.chatTimeline) return;
     setTimeout(() => {
@@ -1083,6 +1096,11 @@ class InterviewApp {
       this.currentFollowUpAudioBase64 = data.audioBase64;
       this.currentFollowUpAudioMime = data.mimeType || "audio/wav";
 
+      if (data.transcribedAnswer) {
+        this.initialAnswer = data.transcribedAnswer;
+        this.updateLastCandidateMessage(data.transcribedAnswer);
+      }
+
       this.addChatMessage("interviewer", this.currentFollowUpQuestion, { isFollowUp: true });
       this.interviewerStatus.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-tertiary"></span>
@@ -1132,8 +1150,8 @@ class InterviewApp {
   async finishCurrentQuestion(finalAnswer, currentBlob = null) {
     this.stopTimer();
 
-    const initialAns = this.isFollowUp ? this.initialAnswer : finalAnswer;
-    const followUpAns = this.isFollowUp ? finalAnswer : "";
+    let initialAns = this.isFollowUp ? this.initialAnswer : finalAnswer;
+    let followUpAns = this.isFollowUp ? finalAnswer : "";
     const targetAudioBlob = currentBlob || this.recordedAudioBlob || this.initialAudioBlob;
 
     if (this.candidateStatus) {
@@ -1147,6 +1165,22 @@ class InterviewApp {
       initialAns,
       followUpAns
     );
+
+    // 音声認識が空またはフォールバックプレースホルダーの場合、Geminiの文字起こし結果で自動補正
+    if (feedback && feedback.transcript) {
+      const isPlaceholder = (txt) => !txt || txt.includes("音声回答") || txt.includes("音声を録音");
+      if (this.isFollowUp) {
+        if (isPlaceholder(followUpAns)) {
+          followUpAns = feedback.transcript;
+          this.updateLastCandidateMessage(feedback.transcript);
+        }
+      } else {
+        if (isPlaceholder(initialAns)) {
+          initialAns = feedback.transcript;
+          this.updateLastCandidateMessage(feedback.transcript);
+        }
+      }
+    }
 
     this.sessionAnswers.push({
       question: this.currentQuestion,

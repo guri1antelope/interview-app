@@ -389,7 +389,7 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
 }`;
 
       const textParts = [];
-      if (!studentAnswer && audioBase64) {
+      if (audioBase64) {
         textParts.push({
           inlineData: {
             mimeType: (mimeType || 'audio/webm').split(';')[0],
@@ -404,7 +404,7 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.6,
-          maxOutputTokens: 150,
+          maxOutputTokens: 250,
           thinkingConfig: {
             thinkingBudget: 0
           }
@@ -438,11 +438,15 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
       });
 
       let followUpText = '';
+      let transcribedAnswer = studentAnswer || '';
       const rawContent = textRes.candidates?.[0]?.content?.parts?.[0]?.text;
       if (rawContent) {
         try {
           const parsed = JSON.parse(rawContent);
           followUpText = parsed.followUpQuestion || '';
+          if (parsed.transcribedAnswer) {
+            transcribedAnswer = parsed.transcribedAnswer;
+          }
         } catch (e) {
           followUpText = rawContent;
         }
@@ -527,6 +531,7 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
       resolve({
         questionText: displayText,
         spokenText: spokenText,
+        transcribedAnswer: transcribedAnswer,
         audioBase64: audioBase64Result,
         mimeType: audioMimeType
       });

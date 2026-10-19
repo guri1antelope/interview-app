@@ -82,6 +82,7 @@ module.exports = async function handler(req, res) {
     // ステップ1: 生徒の回答を踏まえた追加質問テキストをGemini 2.5 Flashで生成
     const promptText = `あなたは新潟市立高志中等教育学校の入学者選抜（面接）の面接官です。
 以下の本質問に対する受験生（小学6年生）の回答を聞いて、回答内容を深掘りする自然な「追加質問」を1問だけ作成してください。
+また、音声から聞き取った受験生の回答内容を「transcribedAnswer」に書き起こしてください。
 
 【本質問】: ${qText}
 【出題意図】: ${intent}
@@ -92,17 +93,18 @@ module.exports = async function handler(req, res) {
 1. 受験生が回答した具体的な言葉やエピソードに触れつつ、「具体的にどのような〜ですか？」「〜についてもっと詳しく教えてください」のように、思考や主体性を引き出す質問にしてください。
 2. 小学生が落ち着いて答えられるよう、丁寧で温かい面接官の口調にしてください。
 3. 質問文の長さは45〜75文字程度にしてください。
-4. 読み上げを考慮し、「高志中等」は「こうしちゅうとう」、「高志」は「こうし」とひらがなで表記してください。
+4. 読み上げを考慮し、「高志中等」は「こうしちゅうとう」、「高志」は「こうし」、「辛い」は「つらい」とひらがなで表記してください。
 
 必ず以下のJSONフォーマットのみで出力してください:
 {
+  "transcribedAnswer": "受験生が話した言葉の文字起こし（要約ではなく正確な発話内容）",
   "followUpQuestion": "質問文"
 }`;
 
     const textUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const textParts = [];
-    // テキストが取得できている場合は巨大な音声Base64の送信を省き、最速レスポンスを実現
-    if (!studentAnswer && audioBase64) {
+    // 生徒の音声データが存在する場合はインラインで送信して直接書き起こし＆追加質問作成
+    if (audioBase64) {
       textParts.push({
         inlineData: {
           mimeType: mimeType.split(';')[0],
@@ -117,7 +119,7 @@ module.exports = async function handler(req, res) {
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.6,
-        maxOutputTokens: 150,
+        maxOutputTokens: 250,
         thinkingConfig: {
           thinkingBudget: 0
         }
@@ -126,11 +128,15 @@ module.exports = async function handler(req, res) {
 
     const textRes = await callGemini(textUrl, textPayload);
     let followUpText = '';
+    let transcribedAnswer = studentAnswer || '';
     const rawContent = textRes.candidates?.[0]?.content?.parts?.[0]?.text;
     if (rawContent) {
       try {
         const parsed = JSON.parse(rawContent);
         followUpText = parsed.followUpQuestion || '';
+        if (parsed.transcribedAnswer) {
+          transcribedAnswer = parsed.transcribedAnswer;
+        }
       } catch (e) {
         followUpText = rawContent;
       }
@@ -197,6 +203,7 @@ module.exports = async function handler(req, res) {
       success: true,
       questionText: displayText,
       spokenText: spokenText,
+      transcribedAnswer: transcribedAnswer,
       audioBase64: audioData,
       mimeType: audioMimeType
     });

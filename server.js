@@ -449,12 +449,12 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
         followUpText = "具体的に、その時どのような工夫をしましたか？";
       }
 
-      // 2. 音声生成 (gemini-3.8-flash-tts, voice: Kore)
+      // 2. 音声生成 (gemini-3.8-flash-lite-tts, voice: Kore) でWAV音声を高速生成
       const ttsPayload = JSON.stringify({
         contents: [{
           role: "user",
           parts: [{
-            text: `## Transcript:\n${followUpText}`
+            text: followUpText
           }]
         }],
         generationConfig: {
@@ -465,7 +465,7 @@ function generateFollowUpWithGemini(questionData, studentAnswer, audioBase64, mi
         }
       });
 
-      const ttsTargetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent?key=${apiKey}`;
+      const ttsTargetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-lite-tts:generateContent?key=${apiKey}`;
       let audioBase64Result = null;
       let audioMimeType = "audio/wav";
 

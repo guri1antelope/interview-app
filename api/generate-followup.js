@@ -137,13 +137,13 @@ module.exports = async function handler(req, res) {
       followUpText = "具体的に、その時どのような工夫をしましたか？";
     }
 
-    // ステップ2: Gemini TTS (gemini-3.8-flash-tts, voice: Kore) でWAV音声を生成
-    const ttsUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent?key=${apiKey}`;
+    // ステップ2: Gemini TTS (gemini-3.8-flash-lite-tts, voice: Kore) でWAV音声を高速生成
+    const ttsUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-lite-tts:generateContent?key=${apiKey}`;
     const ttsPayload = JSON.stringify({
       contents: [{
         role: "user",
         parts: [{
-          text: `## Transcript:\n${followUpText}`
+          text: followUpText
         }]
       }],
       generationConfig: {

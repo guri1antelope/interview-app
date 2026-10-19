@@ -376,6 +376,20 @@ class InterviewApp {
             `;
             this.startAnsweringTurn();
           });
+        } else if (this.currentFollowUpQuestion) {
+          this.setInputAcceptance(false);
+          this.updateActionButton("speaking");
+          this.interviewerStatus.innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+            <span>追加質問を読み上げています…</span>
+          `;
+          this.speakText(this.currentFollowUpQuestion, () => {
+            this.interviewerStatus.innerHTML = `
+              <span class="w-2 h-2 rounded-full bg-secondary"></span>
+              <span>追加質問に答えてみましょう。</span>
+            `;
+            this.startAnsweringTurn();
+          });
         } else {
           this.startAnsweringTurn();
         }
@@ -448,6 +462,8 @@ class InterviewApp {
     document.getElementById("btn-result-retry").addEventListener("click", () => {
       if (this.currentMode === "exam") {
         this.startExamMode();
+      } else if (this.currentMode === "ai-voice") {
+        this.startAiVoiceMode();
       } else {
         this.startPracticeMode();
       }
@@ -1079,7 +1095,14 @@ class InterviewApp {
           this.startAnsweringTurn();
         });
       } else {
-        this.triggerStaticFollowUp(initialAnswer);
+        // 音声データが万一取得できなかった場合も固定質問へ戻さず、生成された動的質問をブラウザ音声で確実に読み上げ
+        this.speakText(this.currentFollowUpQuestion, () => {
+          this.interviewerStatus.innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-secondary"></span>
+            <span>追加質問に答えてみましょう。</span>
+          `;
+          this.startAnsweringTurn();
+        });
       }
 
     } catch (err) {
